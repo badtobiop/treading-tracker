@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { 
   X, 
   Settings, 
-  Key, 
+  HelpCircle,
+  Mail, 
   Download, 
   Upload, 
   RotateCcw, 
   Check, 
-  ExternalLink,
   Shield,
   FileSpreadsheet
 } from 'lucide-react';
@@ -145,35 +145,36 @@ export default function SettingsModal({
               </div>
             </div>
 
-            {/* Gemini API Key */}
-            <div className="card" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(6, 182, 212, 0.04))', borderColor: 'var(--border-accent)' }}>
+            {/* Trader Support & Help */}
+            <div className="card" style={{ background: 'linear-gradient(135deg, rgba(38, 14, 28, 0.8), rgba(20, 7, 15, 0.9))', borderColor: 'rgba(244, 114, 182, 0.3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Key size={17} style={{ color: '#818cf8' }} />
-                  Google Gemini API Key (Optional)
+                  <HelpCircle size={17} style={{ color: 'var(--accent-rose)' }} />
+                  Trader Support & Help Center
                 </span>
-                <a 
-                  href="https://aistudio.google.com/app/apikey" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                >
-                  Get Free Key <ExternalLink size={12} />
-                </a>
+                <span className="badge-profit" style={{ fontSize: '0.7rem' }}>
+                  ● 24/7 Desk
+                </span>
               </div>
 
-              <input 
-                type="password"
-                className="form-input"
-                placeholder="AIzaSy..."
-                value={formData.geminiApiKey || ''}
-                onChange={e => setFormData({ ...formData, geminiApiKey: e.target.value })}
-              />
-
-              <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.4 }}>
-                <Shield size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                Your Gemini API key is securely stored in your browser's <code>localStorage</code>. It enables real-time AI trade parsing and advanced algorithmic performance mentoring.
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, margin: '4px 0 10px 0' }}>
+                Need assistance with trade logs, calculations, or platform issues? Contact our direct support desk.
               </p>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(20, 7, 15, 0.7)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '8px', padding: '10px 12px' }}>
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Support Email</span>
+                  <span style={{ fontSize: '0.84rem', color: '#fff1f2', fontFamily: 'var(--font-mono)' }}>utkarshdhakane2@gmail.com</span>
+                </div>
+                <a 
+                  href="mailto:utkarshdhakane2@gmail.com?subject=TradeMatrix%20Support%20Request"
+                  className="btn btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+                >
+                  <Mail size={13} />
+                  <span>Email Help</span>
+                </a>
+              </div>
             </div>
 
             {/* Data Export / Import */}

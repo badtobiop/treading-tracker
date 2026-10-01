@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { 
   Settings, 
-  Key, 
   Download, 
   Upload, 
   RotateCcw, 
   Check, 
-  ExternalLink,
-  Shield,
-  FileSpreadsheet,
-  Wallet
+  Shield, 
+  FileSpreadsheet, 
+  Wallet,
+  HelpCircle,
+  Mail,
+  MessageSquare
 } from 'lucide-react';
 
 export default function SettingsView({ 
@@ -108,7 +109,7 @@ export default function SettingsView({
               Terminal Settings & Data Management
             </h2>
             <span className="card-subtitle">
-              Manage your initial capital, currency formatting, Gemini API integration, and data backups
+              Manage your initial capital, currency formatting, trader support desk, and data backups
             </span>
           </div>
 
@@ -157,54 +158,69 @@ export default function SettingsView({
           </div>
         </div>
 
-        {/* Google Gemini API Key & Cloud Integrations */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Key size={18} style={{ color: 'var(--accent-rose)' }} />
-              Google Gemini AI & Cloud Integrations
+        {/* Trader Support & Help Center */}
+        <div className="card" style={{ background: 'linear-gradient(135deg, rgba(38, 14, 28, 0.8), rgba(20, 7, 15, 0.9))', borderColor: 'rgba(244, 114, 182, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+            <h3 style={{ fontSize: '1.02rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+              <HelpCircle size={19} style={{ color: 'var(--accent-rose)' }} />
+              Trader Support & Help Center
             </h3>
-            {import.meta.env?.VITE_GEMINI_API_KEY && (
-              <span className="badge-profit" style={{ fontSize: '0.72rem' }}>
-                ● .env Connected (Active for all users)
-              </span>
-            )}
+            <span className="badge-profit" style={{ fontSize: '0.72rem' }}>
+              ● 24/7 Trader Assistance
+            </span>
           </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label className="form-label">Google Gemini API Key</label>
-            <input 
-              type="password"
-              className="form-input"
-              placeholder="AQ.Ab8... (Loaded automatically from .env)"
-              value={formData.geminiApiKey || ''}
-              onChange={e => setFormData({ ...formData, geminiApiKey: e.target.value })}
-            />
-          </div>
-
-          {/* Integration Status Badges */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
-            {/* Google OAuth Status */}
-            <div style={{ padding: '10px 14px', background: 'rgba(20, 7, 15, 0.65)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Google Sign-In (OAuth)</div>
-              <div style={{ fontSize: '0.86rem', fontWeight: 600, color: import.meta.env?.VITE_GOOGLE_CLIENT_ID ? 'var(--profit)' : '#f59e0b', marginTop: '4px' }}>
-                {import.meta.env?.VITE_GOOGLE_CLIENT_ID ? '● Live Google Auth Active' : '● Ready (Awaiting VITE_GOOGLE_CLIENT_ID)'}
-              </div>
-            </div>
-
-            {/* Email Notification Status */}
-            <div style={{ padding: '10px 14px', background: 'rgba(20, 7, 15, 0.65)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Gmail / Webhook Notifications</div>
-              <div style={{ fontSize: '0.86rem', fontWeight: 600, color: import.meta.env?.VITE_NOTIFICATION_API_ENDPOINT ? 'var(--profit)' : '#f59e0b', marginTop: '4px' }}>
-                {import.meta.env?.VITE_NOTIFICATION_API_ENDPOINT ? '● Live Dispatch Active' : '● Ready (Awaiting API Endpoint)'}
-              </div>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '12px', lineHeight: 1.5 }}>
-            <Shield size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} />
-            Your API credentials in <code>.env</code> enable real-time Gemini AI trade parsing, natural language chat mentor, and secure account management across the entire terminal.
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: '16px' }}>
+            Have questions regarding risk calculations, position sizing formulas, or journal synchronization? Our trader support desk is available to assist you.
           </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            {/* Support Email Card */}
+            <div style={{ padding: '14px 16px', background: 'rgba(20, 7, 15, 0.7)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
+                Official Support Desk
+              </span>
+              <strong style={{ fontSize: '0.92rem', color: '#fff1f2', display: 'block', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+                utkarshdhakane2@gmail.com
+              </strong>
+              <span style={{ fontSize: '0.72rem', color: 'var(--profit)', display: 'block', marginTop: '4px' }}>
+                Direct email assistance
+              </span>
+            </div>
+
+            {/* Direct Contact Action */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: 'rgba(20, 7, 15, 0.7)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
+              <a
+                href="mailto:utkarshdhakane2@gmail.com?subject=TradeMatrix%20AI%20Trader%20Support%20Request"
+                className="btn btn-primary"
+                style={{ padding: '10px 18px', fontSize: '0.86rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'center' }}
+              >
+                <Mail size={16} />
+                <span>Contact Official Support</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Quick FAQ Reference */}
+          <div style={{ background: 'rgba(20, 7, 15, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', padding: '14px 16px' }}>
+            <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: '10px' }}>
+              Frequently Asked Questions (FAQ)
+            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              <div>
+                <strong style={{ color: 'var(--text-primary)' }}>Q: How is the recommended position size calculated?</strong>
+                <p style={{ margin: '3px 0 0 0', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  Position size is determined by dividing your strict cash risk (e.g. 2% of capital) by your stop loss distance in price points.
+                </p>
+              </div>
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                <strong style={{ color: 'var(--text-primary)' }}>Q: Where are my recorded trades saved?</strong>
+                <p style={{ margin: '3px 0 0 0', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  All your trades are stored privately in your browser's local encrypted storage, ensuring complete personal confidentiality.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Data Backup & Migration */}

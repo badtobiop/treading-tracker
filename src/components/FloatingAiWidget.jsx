@@ -447,25 +447,25 @@ export default function FloatingAiWidget({
                 <div className="ai-chat-quick-suggestions">
                   <button 
                     className="ai-chat-suggestion-chip"
-                    onClick={() => handleSendChat('10000rs capital me risk management aur position sizing kaise kare?')}
+                    onClick={() => handleSendChat('What are the foundational risk management and position sizing rules for disciplined trading?')}
                   >
-                    🛡️ 10k Risk Rules
+                    🛡️ Risk Management Rules
                   </button>
                   <button 
                     className="ai-chat-suggestion-chip"
-                    onClick={() => handleSendChat('Trading discipline maintain karne ke 3 best golden rules batao')}
+                    onClick={() => handleSendChat('Explain the essential psychological frameworks to prevent revenge trading and emotional tilt.')}
                   >
-                    🧠 Discipline & Mindset
+                    🧠 Discipline & Psychology
                   </button>
                   <button 
                     className="ai-chat-suggestion-chip"
-                    onClick={() => handleSendChat('What are the key rules for high win-rate Gold and Nifty trade entries?')}
+                    onClick={() => handleSendChat('What are the key institutional setup criteria for high win-rate Gold and Index trades?')}
                   >
-                    📊 Strategy Edge
+                    📊 Strategy Execution Edge
                   </button>
                   <button 
                     className="ai-chat-suggestion-chip"
-                    onClick={() => handleSendChat('Audit my recent trades and find my statistical edge and leaks')}
+                    onClick={() => handleSendChat('Audit my recent trades and provide a quantitative breakdown of win-rate, R:R, and drawdowns.')}
                   >
                     🔥 Performance Audit
                   </button>
@@ -476,7 +476,7 @@ export default function FloatingAiWidget({
                   <input 
                     type="text"
                     className="form-input"
-                    placeholder='Ask Gemini AI: "10k me risk kaise lein", "Nifty view", "Gold strategy", "psychology tips"...'
+                    placeholder='Ask Gemini AI: "Position sizing formula", "Order block rules", "Review my risk distribution"...'
                     value={chatInput}
                     onChange={e => setChatInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleSendChat(); }}

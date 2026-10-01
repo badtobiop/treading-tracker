@@ -128,7 +128,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               Pre-Trade Position Size & Capital Allocation Calculator
             </h2>
             <span className="card-subtitle">
-              Calculate exact trade size in {activeCurrency} (e.g. ₹10,000 full capital, ₹5,000 half capital, or ₹2,000) based on your strict 2% risk rule
+              Calculate exact position size and capital allocation (100% Full, 50% Standard, or 20% Conservative) based on strict risk parameters
             </span>
           </div>
 
@@ -315,7 +315,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
             {/* BIG HIGHLIGHT: How many Rupees to deploy */}
             <div style={{ textAlign: 'center', padding: '16px', background: 'rgba(20, 7, 15, 0.7)', borderRadius: '14px', border: '1px solid rgba(244, 114, 182, 0.2)' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                Total Trade Amount (Kitne {activeCurrency} ki trade leni hai):
+                Total Capital to Deploy (Trade Value):
               </span>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '2.5rem', fontWeight: 800, color: '#fff1f2', marginTop: '6px', textShadow: '0 0 20px rgba(244, 114, 182, 0.4)' }}>
                 {formatCurrency(marginRequired, activeCurrency)}
@@ -405,16 +405,16 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
         </div>
       </div>
 
-      {/* DYNAMIC SCENARIO MATRIX: EXACT COMPARISON (10K vs 5K vs 2K) */}
+      {/* DYNAMIC SCENARIO MATRIX: EXACT COMPARISON (100% vs 50% vs 20%) */}
       <div className="card">
         <div className="card-header">
           <div>
             <h3 className="card-title">
               <Sparkles size={19} style={{ color: 'var(--accent-rose)' }} />
-              Position Size Comparison Matrix: "10k vs 5k vs 2k ki trade kab leni chahiye?"
+              Position Size Comparison Matrix: "When should you deploy 100%, 50%, or 20% Capital?"
             </h3>
             <span className="card-subtitle">
-              Based on your {formatCurrency(capital, activeCurrency)} capital and {riskPercent}% ({formatCurrency(dollarRisk, activeCurrency)}) risk rule, see how Stop Loss distance dictates your trade size:
+              Based on your {formatCurrency(capital, activeCurrency)} capital and strict {riskPercent}% ({formatCurrency(dollarRisk, activeCurrency)}) risk management rule:
             </span>
           </div>
         </div>
@@ -441,10 +441,10 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               {formatCurrency(scenario10k.tradeValue, activeCurrency)}
             </div>
             <span className="badge-profit" style={{ fontSize: '0.75rem' }}>
-              100% of Capital (Full 10k Allocation)
+              100% of Capital (Full Allocation)
             </span>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.45 }}>
-              Jab aapka Stop Loss chota (2%) hota hai, tab aap <strong>pure {formatCurrency(capital, activeCurrency)}</strong> ki trade le sakte hain, aur agar SL hit hoga toh loss sirf <strong>{formatCurrency(dollarRisk, activeCurrency)}</strong> hi hoga!
+              When executing with a tight 2.0% stop loss, allocate <strong>{formatCurrency(capital, activeCurrency)} (100% Capital)</strong>. If stopped out, your loss is mathematically capped at exactly <strong>{formatCurrency(dollarRisk, activeCurrency)}</strong>!
             </p>
           </div>
 
@@ -471,7 +471,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               50% of Capital ({formatCurrency(capital * 0.5, activeCurrency)} Trade)
             </span>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.45 }}>
-              Jab Stop Loss 4% ka ho, tab aapko <strong>sirf {formatCurrency(capital * 0.5, activeCurrency)}</strong> ki trade leni chahiye. Baki <strong>{formatCurrency(capital * 0.5, activeCurrency)} cash</strong> safe buffer rahega!
+              With a standard 4.0% stop loss, deploy <strong>{formatCurrency(capital * 0.5, activeCurrency)} (50% Capital)</strong>. The remaining <strong>{formatCurrency(capital * 0.5, activeCurrency)} cash</strong> stays fully protected as a safe reserve buffer!
             </p>
           </div>
 
@@ -498,7 +498,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               20% of Capital ({formatCurrency(capital * 0.2, activeCurrency)} Trade)
             </span>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.45 }}>
-              Agar volatile asset me 10% bada Stop Loss rakhna hai, toh aapko <strong>sirf {formatCurrency(capital * 0.2, activeCurrency)}</strong> ki trade leni chahiye taaki portfolio safe rahe!
+              For swing setups with a wide 10.0% stop loss, allocate <strong>{formatCurrency(capital * 0.2, activeCurrency)} (20% Capital)</strong> to insulate your portfolio from large market drawdowns!
             </p>
           </div>
 
@@ -521,7 +521,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               200% (2x Leverage Required)
             </span>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.45 }}>
-              Agar SL bohot chota (1%) hai, toh ₹200 risk lene ke liye ₹20k volume chahiye jiske liye broker ka <strong>2x margin</strong> use hota hai.
+              For scalp setups with an ultra-tight 1.0% stop loss, deploying high purchasing volume requires <strong>2x broker margin</strong> to achieve your target risk exposure.
             </p>
           </div>
         </div>

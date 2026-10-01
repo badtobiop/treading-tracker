@@ -233,7 +233,7 @@ export default function LogTradeModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Bot size={16} style={{ color: '#818cf8' }} />
-                    Boliye ya Likhiye (Hindi / Hinglish / English):
+                    Voice or Text Dictation (AI Natural Language Parser):
                   </span>
                   {effectiveApiKey ? (
                     <span style={{ fontSize: '0.7rem', color: 'var(--profit)', fontWeight: 600 }}>● Gemini AI Connected (.env)</span>

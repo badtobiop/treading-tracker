@@ -35,6 +35,8 @@ Type your query below or click one of the quick analysis templates!`
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const effectiveApiKey = geminiApiKey || import.meta.env?.VITE_GEMINI_API_KEY || '';
+
   if (!isOpen) return null;
 
   const handleSend = async (queryText) => {
@@ -47,7 +49,7 @@ Type your query below or click one of the quick analysis templates!`
     setIsLoading(true);
 
     try {
-      const response = await getAiTradingAdvice(trades, textToSend, geminiApiKey);
+      const response = await getAiTradingAdvice(trades, textToSend, effectiveApiKey);
       setMessages(prev => [...prev, { role: 'assistant', text: response }]);
     } catch (e) {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Error getting advice. Please try again.' }]);
@@ -68,7 +70,7 @@ Type your query below or click one of the quick analysis templates!`
             <div>
               <h2 className="modal-title" style={{ fontSize: '1.15rem' }}>Gemini AI Trading Mentor</h2>
               <span className="card-subtitle">
-                {geminiApiKey ? 'Live Gemini 1.5 Flash Connected' : 'Local Heuristic AI (Add API Key in settings for full LLM)'}
+                {effectiveApiKey ? '● Gemini Intelligence Online' : '● Quantitative Analysis Engine'}
               </span>
             </div>
           </div>

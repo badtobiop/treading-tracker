@@ -23,7 +23,8 @@ import {
   saveUserTrades, 
   resetUserTrades, 
   getUserSettings, 
-  saveUserSettings 
+  saveUserSettings,
+  syncUserTradesFromDatabase
 } from './services/storageService';
 
 export default function App() {
@@ -123,6 +124,15 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // Background Cloud Database Sync (Fetches latest records from PostgreSQL)
+  useEffect(() => {
+    if (currentUser) {
+      syncUserTradesFromDatabase(currentUser, (cloudTrades) => {
+        setTrades(cloudTrades);
+      });
+    }
+  }, [currentUser?.email, currentUser?.id]);
+
   // Save isolated trades exclusively for the active user
   useEffect(() => {
     if (currentUser) {
@@ -178,6 +188,9 @@ export default function App() {
     setCurrentUser(user);
     setTrades(userTrades);
     setSettings(userSettings);
+    syncUserTradesFromDatabase(user, (cloudTrades) => {
+      setTrades(cloudTrades);
+    });
   };
 
   return (

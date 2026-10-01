@@ -1,6 +1,13 @@
-// Multi-Tenant Isolated Storage Service
+// Multi-Tenant Isolated Storage Service + Cloud PostgreSQL Sync
 // Guarantees 100% strict data separation between individual trader accounts
 import { INITIAL_SETTINGS } from '../data/initialData';
+import { 
+  syncUserProfile, 
+  fetchUserTradesFromCloud, 
+  insertUserTradeToCloud, 
+  resetUserTradesInCloud,
+  isSupabaseConfigured 
+} from './supabaseClient';
 
 /**
  * Generates an isolated, safe storage key specific to the current trader
@@ -49,6 +56,37 @@ export function getUserTrades(user) {
 }
 
 /**
+ * Asynchronously synchronizes user trades with PostgreSQL database
+ */
+export async function syncUserTradesFromDatabase(user, onTradesLoaded) {
+  if (!user || !isSupabaseConfigured()) return;
+  try {
+    // 1. Sync Profile
+    await syncUserProfile(user);
+
+    // 2. Fetch from PostgreSQL
+    const cloudTrades = await fetchUserTradesFromCloud(user);
+    if (cloudTrades && Array.isArray(cloudTrades)) {
+      const key = getUserStorageKey(user, 'trades');
+      const localTrades = getUserTrades(user);
+
+      // If local has trades that are not yet in cloud, sync them up
+      if (localTrades.length > 0 && cloudTrades.length === 0) {
+        for (const t of localTrades) {
+          await insertUserTradeToCloud(t, user);
+        }
+      } else if (cloudTrades.length > 0) {
+        // Cloud has records, save to local cache
+        localStorage.setItem(key, JSON.stringify(cloudTrades));
+        if (onTradesLoaded) onTradesLoaded(cloudTrades);
+      }
+    }
+  } catch (err) {
+    console.warn('[Storage Sync] Cloud database sync skipped:', err);
+  }
+}
+
+/**
  * Saves trades exclusively for the specific trader
  */
 export function saveUserTrades(user, trades) {
@@ -56,6 +94,12 @@ export function saveUserTrades(user, trades) {
   try {
     const key = getUserStorageKey(user, 'trades');
     localStorage.setItem(key, JSON.stringify(trades));
+
+    // Background push to PostgreSQL if connected
+    if (isSupabaseConfigured() && Array.isArray(trades) && trades.length > 0) {
+      // Sync latest trade
+      insertUserTradeToCloud(trades[0], user).catch(() => {});
+    }
   } catch (err) {
     console.error('Failed to save isolated user trades:', err);
   }
@@ -69,6 +113,11 @@ export function resetUserTrades(user) {
   try {
     const key = getUserStorageKey(user, 'trades');
     localStorage.removeItem(key);
+
+    // Also reset in PostgreSQL if connected
+    if (isSupabaseConfigured()) {
+      resetUserTradesInCloud(user).catch(() => {});
+    }
   } catch (err) {
     console.error('Failed to reset user trades:', err);
   }

@@ -137,7 +137,14 @@ export default function AuthPage({ onLoginSuccess }) {
         handleGoogleSuccess(googleUser);
       },
       onError: (err) => {
-        setErrorMessage(err.message || 'Google Sign-In was cancelled.');
+        const msg = err?.message || 'Google Sign-In encountered an error.';
+        if (msg.toLowerCase().includes('origin') || msg.toLowerCase().includes('not allowed')) {
+          setErrorMessage(
+            `Google Origin Mismatch: Please add "${window.location.origin}" to Authorized JavaScript origins in Google Cloud Console. Or simply sign up with your Email & Password below!`
+          );
+        } else {
+          setErrorMessage(msg);
+        }
       }
     });
   };

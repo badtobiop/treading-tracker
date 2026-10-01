@@ -20,11 +20,14 @@ export function decodeGoogleJwt(token) {
   }
 }
 
+const DEFAULT_GOOGLE_CLIENT_ID = '966654270078-os3mj52etkg5n0td5udkftk46ahuoug1.apps.googleusercontent.com';
+
 /**
  * Interactive Google Login trigger using OAuth 2.0 Token Client (Strict - NO browser prompt)
  */
-export function promptGoogleLogin({ onSuccess, onError }) {
-  const clientId = import.meta.env?.VITE_GOOGLE_CLIENT_ID;
+export async function promptGoogleLogin({ onSuccess, onError }) {
+  const clientId = (import.meta.env?.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()) 
+    || DEFAULT_GOOGLE_CLIENT_ID;
 
   if (!clientId || clientId.trim() === '') {
     if (onError) {
@@ -33,10 +36,18 @@ export function promptGoogleLogin({ onSuccess, onError }) {
     return;
   }
 
-  // Ensure Google Identity Services SDK is ready
+  // Ensure Google Identity Services SDK is ready (wait up to 3 seconds if initializing)
+  if (!window.google?.accounts?.oauth2) {
+    let waited = 0;
+    while (!window.google?.accounts?.oauth2 && waited < 3000) {
+      await new Promise(r => setTimeout(r, 150));
+      waited += 150;
+    }
+  }
+
   if (!window.google?.accounts?.oauth2) {
     if (onError) {
-      onError(new Error('Google Sign-In is initializing. Please check your internet connection and try again.'));
+      onError(new Error('Google Sign-In SDK is initializing or blocked by an ad-blocker. Please check your connection and try again.'));
     }
     return;
   }

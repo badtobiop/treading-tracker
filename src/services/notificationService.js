@@ -7,8 +7,8 @@
  * 2. Fallback to Local Notification Audit Log in browser localStorage
  */
 export async function sendNewUserRegistrationNotification(user) {
-  const adminEmail = import.meta.env?.VITE_NOTIFICATION_ADMIN_EMAIL || 'admin@tradematrix.io';
-  const apiEndpoint = import.meta.env?.VITE_NOTIFICATION_API_ENDPOINT;
+  const adminEmail = import.meta.env?.VITE_NOTIFICATION_ADMIN_EMAIL || 'utkarshdhakane2@gmail.com';
+  const apiEndpoint = import.meta.env?.VITE_NOTIFICATION_API_ENDPOINT || '/api/notify-signup';
 
   const notificationPayload = {
     event: 'NEW_USER_REGISTRATION',

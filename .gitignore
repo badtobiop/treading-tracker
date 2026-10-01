@@ -9,10 +9,20 @@ lerna-debug.log*
 
 node_modules
 dist
-*.local
+# Environment & Secrets (NEVER COMMIT)
 .env
 .env.*
+.env.local
+.env.production
+.env.development
 !.env.example
+*.pem
+*.key
+*.cert
+*.secret
+testTurso.js
+testEmail.js
+credentials.json
 
 # Editor directories and files
 .vscode/*

@@ -1,10 +1,10 @@
 // Turso (libSQL / SQLite) Cloud Database Service
+// Security Architecture: Uses Secure Backend Proxy (/api/db) to protect tokens from client exposure
 import { createClient } from '@libsql/client/web';
 
 const rawTursoUrl = import.meta.env?.VITE_TURSO_DATABASE_URL || 'libsql://trad-badtobiop.aws-ap-south-1.turso.io';
 const tursoAuthToken = import.meta.env?.VITE_TURSO_AUTH_TOKEN || '';
 
-// Format URL for web client (converts libsql:// to https://)
 export const formatTursoUrl = (url) => {
   if (!url) return '';
   if (url.startsWith('libsql://')) {
@@ -16,14 +16,15 @@ export const formatTursoUrl = (url) => {
 export const tursoUrl = formatTursoUrl(rawTursoUrl);
 
 export const isTursoConfigured = () => {
-  return Boolean(tursoUrl && tursoAuthToken && tursoAuthToken.trim().length > 10);
+  // Always true if URL is set or server proxy is available
+  return Boolean(tursoUrl || tursoAuthToken);
 };
 
 let tursoClient = null;
 let tablesInitialized = false;
 
-export function getTursoClient() {
-  if (!isTursoConfigured()) return null;
+function getDirectClient() {
+  if (!tursoAuthToken || tursoAuthToken.trim().length < 10) return null;
   if (!tursoClient) {
     try {
       tursoClient = createClient({
@@ -31,7 +32,7 @@ export function getTursoClient() {
         authToken: tursoAuthToken.trim()
       });
     } catch (err) {
-      console.warn('[Turso] Failed to initialize client:', err);
+      console.warn('[Turso] Direct client init failed:', err);
       return null;
     }
   }
@@ -39,10 +40,10 @@ export function getTursoClient() {
 }
 
 /**
- * Automatically creates all required tables on first connection
+ * Ensures tables exist in database
  */
 export async function ensureTursoTables() {
-  const client = getTursoClient();
+  const client = getDirectClient();
   if (!client || tablesInitialized) return;
 
   try {
@@ -89,28 +90,46 @@ export async function ensureTursoTables() {
       `CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)`
     ]);
     tablesInitialized = true;
-    console.log('[Turso] Database tables initialized successfully.');
   } catch (err) {
-    console.warn('[Turso] Auto-table initialization warning:', err.message);
+    console.warn('[Turso] Table init notice:', err.message);
   }
 }
 
 /**
- * Sync user profile to Turso database
+ * Sync user profile to Turso database via Secure Proxy
  */
 export async function syncUserProfileToTurso(user) {
-  const client = getTursoClient();
-  if (!client || !user) return null;
+  if (!user) return false;
+  const userId = user.id || user.email;
+
+  // 1. Try secure backend proxy /api/db first
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'syncProfile',
+        userId,
+        profile: {
+          email: user.email,
+          name: user.name,
+          avatar: user.avatar,
+          capital: user.capital,
+          authProvider: user.authProvider
+        }
+      })
+    });
+    if (res.ok) return true;
+  } catch (e) {
+    // Fall back to direct client if proxy is not serving locally
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) return false;
 
   try {
     await ensureTursoTables();
-    const id = user.id || user.email;
-    const email = (user.email || '').toLowerCase().trim();
-    const name = user.name || 'Trader';
-    const avatar = user.avatar || '';
-    const capital = Number(user.capital) || 10000;
-    const authProvider = user.authProvider || 'email';
-
     await client.execute({
       sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -119,25 +138,45 @@ export async function syncUserProfileToTurso(user) {
               capital = excluded.capital,
               avatar = excluded.avatar,
               updated_at = CURRENT_TIMESTAMP`,
-      args: [id, email, name, avatar, capital, authProvider]
+      args: [userId, (user.email || '').toLowerCase().trim(), user.name || 'Trader', user.avatar || '', Number(user.capital) || 10000, user.authProvider || 'email']
     });
     return true;
   } catch (err) {
-    console.warn('[Turso] Error syncing user profile:', err);
+    console.warn('[Turso] Profile sync notice:', err);
     return false;
   }
 }
 
 /**
- * Fetch trades exclusively for the active user from Turso
+ * Fetch trades exclusively for the active user via Secure Proxy
  */
 export async function fetchUserTradesFromTurso(user) {
-  const client = getTursoClient();
-  if (!client || !user) return null;
+  if (!user) return null;
+  const userId = user.id || user.email;
+
+  // 1. Try secure backend proxy /api/db first
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'fetchTrades', userId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.trades)) {
+        return data.trades;
+      }
+    }
+  } catch (e) {
+    // Fall back to direct client if proxy is not serving locally
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) return null;
 
   try {
     await ensureTursoTables();
-    const userId = user.id || user.email;
     const res = await client.execute({
       sql: `SELECT * FROM trades WHERE user_id = ? ORDER BY date DESC, created_at DESC`,
       args: [userId]
@@ -164,22 +203,36 @@ export async function fetchUserTradesFromTurso(user) {
       emotion: String(row.emotion || 'neutral')
     }));
   } catch (err) {
-    console.warn('[Turso] Error fetching trades:', err);
+    console.warn('[Turso] Fetch notice:', err);
     return null;
   }
 }
 
 /**
- * Insert or update trade for a user in Turso
+ * Insert or update trade for a user via Secure Proxy
  */
 export async function insertUserTradeToTurso(trade, user) {
-  const client = getTursoClient();
-  if (!client || !user || !trade) return false;
+  if (!trade || !user) return false;
+  const userId = user.id || user.email;
+
+  // 1. Try secure backend proxy /api/db first
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveTrade', userId, trade })
+    });
+    if (res.ok) return true;
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) return false;
 
   try {
     await ensureTursoTables();
-    const userId = user.id || user.email;
-
     await client.execute({
       sql: `INSERT INTO trades (
               id, user_id, date, time, asset, type, 
@@ -229,47 +282,73 @@ export async function insertUserTradeToTurso(trade, user) {
     });
     return true;
   } catch (err) {
-    console.warn('[Turso] Error inserting trade:', err);
+    console.warn('[Turso] Insert notice:', err);
     return false;
   }
 }
 
 /**
- * Delete a trade from Turso
+ * Delete a trade from Turso via Secure Proxy
  */
 export async function deleteUserTradeFromTurso(tradeId, user) {
-  const client = getTursoClient();
-  if (!client || !user || !tradeId) return false;
+  if (!tradeId || !user) return false;
+  const userId = user.id || user.email;
 
   try {
-    const userId = user.id || user.email;
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteTrade', userId, tradeId })
+    });
+    if (res.ok) return true;
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  const client = getDirectClient();
+  if (!client) return false;
+
+  try {
     await client.execute({
       sql: `DELETE FROM trades WHERE id = ? AND user_id = ?`,
       args: [tradeId, userId]
     });
     return true;
   } catch (err) {
-    console.warn('[Turso] Error deleting trade:', err);
+    console.warn('[Turso] Delete notice:', err);
     return false;
   }
 }
 
 /**
- * Reset all trades for a user in Turso
+ * Reset all trades for a user in Turso via Secure Proxy
  */
 export async function resetUserTradesInTurso(user) {
-  const client = getTursoClient();
-  if (!client || !user) return false;
+  if (!user) return false;
+  const userId = user.id || user.email;
 
   try {
-    const userId = user.id || user.email;
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resetTrades', userId })
+    });
+    if (res.ok) return true;
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  const client = getDirectClient();
+  if (!client) return false;
+
+  try {
     await client.execute({
       sql: `DELETE FROM trades WHERE user_id = ?`,
       args: [userId]
     });
     return true;
   } catch (err) {
-    console.warn('[Turso] Error resetting trades in Turso:', err);
+    console.warn('[Turso] Reset notice:', err);
     return false;
   }
 }

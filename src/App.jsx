@@ -18,6 +18,13 @@ import StarfieldCanvas from './components/StarfieldCanvas';
 
 import { INITIAL_TRADES, INITIAL_SETTINGS } from './data/initialData';
 import { calculateMetrics } from './utils/calculations';
+import { 
+  getUserTrades, 
+  saveUserTrades, 
+  resetUserTrades, 
+  getUserSettings, 
+  saveUserSettings 
+} from './services/storageService';
 
 export default function App() {
   // Authentication state
@@ -30,36 +37,23 @@ export default function App() {
     }
   });
 
-  // Load trades from localStorage (Clean zero-data start)
+  // Load isolated trades for the active user (100% separate per user)
   const [trades, setTrades] = useState(() => {
     try {
-      const saved = localStorage.getItem('tradematrix_trades');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.some(t => t.id === 'tr-101')) {
-          localStorage.removeItem('tradematrix_trades');
-          return [];
-        }
-        return parsed;
-      }
-      return [];
+      const savedUser = localStorage.getItem('tradematrix_current_user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      return user ? getUserTrades(user) : [];
     } catch (e) {
       return [];
     }
   });
 
-  // Load settings from localStorage
+  // Load isolated settings for the active user
   const [settings, setSettings] = useState(() => {
     try {
-      const saved = localStorage.getItem('tradematrix_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!parsed.geminiApiKey && import.meta.env?.VITE_GEMINI_API_KEY) {
-          parsed.geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        }
-        return parsed;
-      }
-      return INITIAL_SETTINGS;
+      const savedUser = localStorage.getItem('tradematrix_current_user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      return user ? getUserSettings(user) : INITIAL_SETTINGS;
     } catch (e) {
       return INITIAL_SETTINGS;
     }
@@ -129,22 +123,19 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Save to localStorage
+  // Save isolated trades exclusively for the active user
   useEffect(() => {
-    try {
-      localStorage.setItem('tradematrix_trades', JSON.stringify(trades));
-    } catch (e) {
-      console.error('Failed to save trades to localStorage', e);
+    if (currentUser) {
+      saveUserTrades(currentUser, trades);
     }
-  }, [trades]);
+  }, [trades, currentUser]);
 
+  // Save isolated settings exclusively for the active user
   useEffect(() => {
-    try {
-      localStorage.setItem('tradematrix_settings', JSON.stringify(settings));
-    } catch (e) {
-      console.error('Failed to save settings to localStorage', e);
+    if (currentUser) {
+      saveUserSettings(currentUser, settings);
     }
-  }, [settings]);
+  }, [settings, currentUser]);
 
   // Compute live metrics
   const metrics = calculateMetrics(trades, settings.initialCapital);
@@ -160,7 +151,9 @@ export default function App() {
 
   const handleResetTrades = () => {
     setTrades([]);
-    localStorage.removeItem('tradematrix_trades');
+    if (currentUser) {
+      resetUserTrades(currentUser);
+    }
   };
 
   const handleImportTrades = (importedList) => {
@@ -174,6 +167,17 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('tradematrix_current_user');
     setCurrentUser(null);
+    setTrades([]);
+    setSettings(INITIAL_SETTINGS);
+    setActiveTab('dashboard');
+  };
+
+  const handleLoginSuccess = (user) => {
+    const userTrades = getUserTrades(user);
+    const userSettings = getUserSettings(user);
+    setCurrentUser(user);
+    setTrades(userTrades);
+    setSettings(userSettings);
   };
 
   return (
@@ -183,7 +187,7 @@ export default function App() {
 
       {/* If not logged in, render AuthPage */}
       {!currentUser ? (
-        <AuthPage onLoginSuccess={(user) => setCurrentUser(user)} />
+        <AuthPage onLoginSuccess={handleLoginSuccess} />
       ) : (
         <div className="app-container">
           {/* Left Sidebar (100% Fixed Anchor) */}

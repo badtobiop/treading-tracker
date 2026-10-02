@@ -12,7 +12,8 @@ import {
   Flame,
   Zap,
   Plus,
-  Sparkles
+  Sparkles,
+  Target
 } from 'lucide-react';
 import { formatCurrency, calculateDayOfWeekStats, calculateAssetStats } from '../utils/calculations';
 
@@ -25,6 +26,12 @@ export default function Dashboard({
 }) {
   const dayStats = calculateDayOfWeekStats(trades);
   const assetStats = calculateAssetStats(trades);
+
+  // Outcome statistics for Monthly Progress
+  const tpHitTrades = trades.filter(t => t.outcome === 'TP_HIT' || (Number(t.pnl) > 0 && !t.outcome));
+  const slHitTrades = trades.filter(t => t.outcome === 'SL_HIT' || (Number(t.pnl) < 0 && !t.outcome));
+  const totalDecided = tpHitTrades.length + slHitTrades.length;
+  const targetHitRate = totalDecided > 0 ? ((tpHitTrades.length / totalDecided) * 100).toFixed(1) : 0;
 
   // Recent 5 trades
   const recentTrades = [...trades]
@@ -160,6 +167,22 @@ export default function Dashboard({
           </div>
           <div className="kpi-subtext">
             <span>Peak-to-Trough Capital Risk</span>
+          </div>
+        </div>
+
+        {/* Target (TP) Hit Rate */}
+        <div className="kpi-card" style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}>
+          <div className="kpi-header">
+            <span className="kpi-title" style={{ color: 'var(--profit)' }}>Target (TP) Hit Rate</span>
+            <div className="kpi-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--profit)' }}>
+              <Target size={18} />
+            </div>
+          </div>
+          <div className="kpi-value text-profit">
+            {targetHitRate}%
+          </div>
+          <div className="kpi-subtext">
+            <span>🎯 {tpHitTrades.length} TP Hit • 🛑 {slHitTrades.length} SL Hit</span>
           </div>
         </div>
       </div>
@@ -428,11 +451,39 @@ export default function Dashboard({
                             fontFamily: 'var(--font-mono)', 
                             fontWeight: 700, 
                             fontSize: '0.92rem',
-                            color: trade.pnl >= 0 ? 'var(--profit)' : 'var(--loss)'
+                            color: trade.outcome === 'OPEN' ? 'var(--accent-cyan)' : trade.pnl >= 0 ? 'var(--profit)' : 'var(--loss)'
                           }}
                         >
-                          {formatCurrency(trade.pnl, currency)}
+                          {trade.outcome === 'OPEN' ? 'OPEN' : formatCurrency(trade.pnl, currency)}
                         </span>
+                        {trade.outcome === 'TP_HIT' && (
+                          <div>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.2)', color: 'var(--profit)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                              🎯 TP HIT
+                            </span>
+                          </div>
+                        )}
+                        {trade.outcome === 'SL_HIT' && (
+                          <div>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(244, 63, 94, 0.2)', color: 'var(--loss)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                              🛑 SL HIT
+                            </span>
+                          </div>
+                        )}
+                        {trade.outcome === 'BREAKEVEN' && (
+                          <div>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                              ⚖️ BREAKEVEN
+                            </span>
+                          </div>
+                        )}
+                        {trade.outcome === 'OPEN' && (
+                          <div>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                              ⏳ OPEN
+                            </span>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

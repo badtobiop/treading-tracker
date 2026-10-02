@@ -25,6 +25,14 @@ export default function TradeLogbook({
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedTrade, setSelectedTrade] = useState(null);
 
+  // Outcome statistics for Monthly Progress
+  const tpHitCount = trades.filter(t => t.outcome === 'TP_HIT' || (Number(t.pnl) > 0 && !t.outcome)).length;
+  const slHitCount = trades.filter(t => t.outcome === 'SL_HIT' || (Number(t.pnl) < 0 && !t.outcome)).length;
+  const breakevenCount = trades.filter(t => t.outcome === 'BREAKEVEN').length;
+  const openCount = trades.filter(t => t.outcome === 'OPEN').length;
+  const totalDecided = tpHitCount + slHitCount;
+  const targetHitRate = totalDecided > 0 ? ((tpHitCount / totalDecided) * 100).toFixed(1) : 0;
+
   // Filter trades
   const filteredTrades = trades.filter(t => {
     // Search
@@ -39,9 +47,11 @@ export default function TradeLogbook({
     // Type
     const typeMatch = typeFilter === 'ALL' || t.type === typeFilter;
 
-    // Status
+    // Status / Outcome
     const pnl = Number(t.pnl) || 0;
     const statusMatch = statusFilter === 'ALL' || 
+      (statusFilter === 'TP_HIT' && (t.outcome === 'TP_HIT' || (pnl > 0 && !t.outcome))) ||
+      (statusFilter === 'SL_HIT' && (t.outcome === 'SL_HIT' || (pnl < 0 && !t.outcome))) ||
       (statusFilter === 'WIN' && pnl > 0) ||
       (statusFilter === 'LOSS' && pnl < 0);
 
@@ -106,6 +116,8 @@ export default function TradeLogbook({
               style={{ width: 'auto' }}
             >
               <option value="ALL">All Outcomes</option>
+              <option value="TP_HIT">🎯 TP Hit Trades ({tpHitCount})</option>
+              <option value="SL_HIT">🛑 SL Hit Trades ({slHitCount})</option>
               <option value="WIN">Profits (Wins)</option>
               <option value="LOSS">Losses</option>
             </select>
@@ -114,6 +126,36 @@ export default function TradeLogbook({
               <Plus size={16} />
               <span>Log Trade</span>
             </button>
+          </div>
+        </div>
+
+        {/* Monthly Progress / Target vs Stop Loss Hit Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Monthly Outcome Progress:</span>
+            <span style={{ fontSize: '0.82rem', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--profit)', padding: '4px 10px', borderRadius: '12px', fontWeight: 700 }}>
+              🎯 {tpHitCount} TP Hit
+            </span>
+            <span style={{ fontSize: '0.82rem', background: 'rgba(244, 63, 94, 0.15)', color: 'var(--loss)', padding: '4px 10px', borderRadius: '12px', fontWeight: 700 }}>
+              🛑 {slHitCount} SL Hit
+            </span>
+            {breakevenCount > 0 && (
+              <span style={{ fontSize: '0.82rem', background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)', padding: '4px 10px', borderRadius: '12px' }}>
+                ⚖️ {breakevenCount} Breakeven
+              </span>
+            )}
+            {openCount > 0 && (
+              <span style={{ fontSize: '0.82rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '4px 10px', borderRadius: '12px' }}>
+                ⏳ {openCount} Open
+              </span>
+            )}
+          </div>
+
+          <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Target Hit Rate: </span>
+            <span style={{ color: Number(targetHitRate) >= 50 ? 'var(--profit)' : 'var(--loss)', fontFamily: 'var(--font-mono)', fontSize: '0.95rem' }}>
+              {targetHitRate}%
+            </span>
           </div>
         </div>
       </div>
@@ -237,9 +279,33 @@ export default function TradeLogbook({
                             color: isWin ? 'var(--profit)' : 'var(--loss)'
                           }}
                         >
-                          {formatCurrency(pnl, currency)}
+                          {trade.outcome === 'OPEN' ? (
+                            <span style={{ color: 'var(--accent-cyan)' }}>Running</span>
+                          ) : (
+                            formatCurrency(pnl, currency)
+                          )}
                         </div>
-                        {trade.pnlPercent && (
+                        {trade.outcome === 'TP_HIT' && (
+                          <span style={{ fontSize: '0.68rem', background: 'rgba(16, 185, 129, 0.2)', color: 'var(--profit)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                            🎯 TP HIT
+                          </span>
+                        )}
+                        {trade.outcome === 'SL_HIT' && (
+                          <span style={{ fontSize: '0.68rem', background: 'rgba(244, 63, 94, 0.2)', color: 'var(--loss)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                            🛑 SL HIT
+                          </span>
+                        )}
+                        {trade.outcome === 'BREAKEVEN' && (
+                          <span style={{ fontSize: '0.68rem', background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                            ⚖️ BREAKEVEN
+                          </span>
+                        )}
+                        {trade.outcome === 'OPEN' && (
+                          <span style={{ fontSize: '0.68rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                            ⏳ OPEN
+                          </span>
+                        )}
+                        {trade.pnlPercent && trade.outcome !== 'OPEN' && (
                           <div style={{ fontSize: '0.72rem', color: isWin ? 'var(--profit)' : 'var(--loss)' }}>
                             {trade.pnlPercent > 0 ? '+' : ''}{trade.pnlPercent}%
                           </div>
@@ -282,8 +348,8 @@ export default function TradeLogbook({
 
       {/* Trade Detail Modal */}
       {selectedTrade && (
-        <div className="modal-overlay" onClick={() => setSelectedTrade(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" data-lenis-prevent="true" onClick={() => setSelectedTrade(null)}>
+          <div className="modal-content" data-lenis-prevent="true" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span className="asset-badge" style={{ fontSize: '1.2rem' }}>{selectedTrade.asset}</span>

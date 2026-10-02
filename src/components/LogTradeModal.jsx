@@ -159,6 +159,11 @@ export default function LogTradeModal({
   const totalPositionValue = exactUnitsNeeded > 0 && entryNum > 0 ? (exactUnitsNeeded * entryNum) : 0;
   const marginNeededWithLeverage = leverage > 0 ? (totalPositionValue / leverage) : totalPositionValue;
 
+  // Dual Currency Conversion (1 USD ≈ ₹90 for Crypto USDT & Forex)
+  const USD_INR_RATE = 90;
+  const toUSD = (inrVal) => (parseFloat(inrVal) / USD_INR_RATE).toFixed(2);
+  const toINR = (usdVal) => (parseFloat(usdVal) * USD_INR_RATE).toFixed(0);
+
   // Set TP directly using desired Risk:Reward ratio (1.5, 2.0, 3.0)
   const handleSetRR = (ratio) => {
     if (entryNum <= 0 || slNum <= 0) {
@@ -654,6 +659,9 @@ export default function LogTradeModal({
                           <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--profit)', margin: '2px 0' }}>
                             {currency}{marginNeededWithLeverage.toFixed(0)}
                           </div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                            {currency === '₹' ? `≈ $${toUSD(marginNeededWithLeverage)} USD / USDT` : `≈ ₹${toINR(marginNeededWithLeverage)} INR`}
+                          </div>
                           <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
                             {leverage > 1 ? `(${leverage}x Leverage Margin)` : '(Full Cash Value)'}
                           </span>
@@ -668,7 +676,7 @@ export default function LogTradeModal({
                             {exactUnitsNeeded.toFixed(2)}
                           </div>
                           <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
-                            Units / Shares (Total value {currency}{totalPositionValue.toFixed(0)})
+                            Units / Lots (Value: {currency}{totalPositionValue.toFixed(0)} {currency === '₹' ? `≈ $${toUSD(totalPositionValue)} USD` : ''})
                           </span>
                         </div>
 
@@ -677,11 +685,11 @@ export default function LogTradeModal({
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
                             👉 SL & TP Hit Result:
                           </span>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--loss)', marginTop: '4px' }}>
-                            🛑 SL Hit: -{currency}{targetRiskRupees.toFixed(0)}
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--loss)', marginTop: '4px' }}>
+                            🛑 SL Hit: -{currency}{targetRiskRupees.toFixed(0)} <span style={{ fontSize: '0.72rem', color: 'rgba(244,63,94,0.85)' }}>({currency === '₹' ? `≈ -$${toUSD(targetRiskRupees)} USD` : ''})</span>
                           </div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--profit)', marginTop: '2px' }}>
-                            🎯 TP Hit: +{currency}{(exactUnitsNeeded * rewardDist).toFixed(0)}
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--profit)', marginTop: '2px' }}>
+                            🎯 TP Hit: +{currency}{(exactUnitsNeeded * rewardDist).toFixed(0)} <span style={{ fontSize: '0.72rem', color: 'rgba(16,185,129,0.85)' }}>({currency === '₹' ? `≈ +$${toUSD(exactUnitsNeeded * rewardDist)} USD` : ''})</span>
                           </div>
                         </div>
                       </div>
@@ -699,7 +707,7 @@ export default function LogTradeModal({
                     </div>
                   ) : (
                     <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.76rem', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      💡 Upar <strong>Buy / Entry Price</strong> aur <strong>Stop Loss (SL)</strong> daalein — yeh calculator automatic bata dega ki 10k me se kitne rupaye ka trade lena hai taaki SL pe sirf ₹{targetRiskRupees} ka loss ho.
+                      💡 Upar <strong>Buy / Entry Price</strong> aur <strong>Stop Loss (SL)</strong> daalein — yeh calculator automatic bata dega ki 10k me se kitne rupaye (aur USD) ka trade lena hai taaki SL pe sirf ₹{targetRiskRupees} ka loss ho.
                     </div>
                   )}
                 </div>
@@ -707,15 +715,22 @@ export default function LogTradeModal({
                 {/* Trade Investment Amount vs Quantity (User can input either 1k or Lot Size) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
                   <div>
-                    <label className="form-label">
-                      <span>Trade Amount ({currency})</span>
-                      <span style={{ color: 'var(--text-muted)' }}>Kitne rupaye ka trade liya</span>
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ marginBottom: 0 }}>
+                        <span>Trade Amount ({currency})</span>
+                      </label>
+                      {currentAmt > 0 && (
+                        <span style={{ fontSize: '0.74rem', color: 'var(--accent-cyan)', fontWeight: 700, background: 'rgba(56, 189, 248, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+                          {currency === '₹' ? `≈ $${toUSD(currentAmt)} USD / USDT` : `≈ ₹${toINR(currentAmt)} INR`}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', margin: '2px 0 4px' }}>Kitne rupaye / dollar ka trade liya</span>
                     <input 
                       type="number" 
                       step="any"
                       className="form-input" 
-                      placeholder="e.g. 1000 ya 10000"
+                      placeholder={currency === '₹' ? 'e.g. 1000 ya 10000' : 'e.g. 10 or 100'}
                       value={formData.tradeAmount}
                       onChange={e => handleInputChange('tradeAmount', e.target.value)}
                     />
@@ -773,6 +788,11 @@ export default function LogTradeModal({
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.4rem', fontWeight: 800, color: 'var(--profit)', margin: '4px 0' }}>
                       +{currency}{potentialProfitOnTP > 0 ? potentialProfitOnTP.toFixed(0) : '0'}
                     </div>
+                    {potentialProfitOnTP > 0 && currency === '₹' && (
+                      <div style={{ fontSize: '0.74rem', color: 'var(--accent-cyan)', fontWeight: 700, marginBottom: '2px' }}>
+                        ≈ +${toUSD(potentialProfitOnTP)} USD / USDT
+                      </div>
+                    )}
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                       Target: {tpNum > 0 ? tpNum : 'Set TP'}
                     </span>
@@ -786,6 +806,11 @@ export default function LogTradeModal({
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.4rem', fontWeight: 800, color: 'var(--loss)', margin: '4px 0' }}>
                       -{currency}{potentialLossOnSL > 0 ? potentialLossOnSL.toFixed(0) : '0'}
                     </div>
+                    {potentialLossOnSL > 0 && currency === '₹' && (
+                      <div style={{ fontSize: '0.74rem', color: 'rgba(244,63,94,0.9)', fontWeight: 700, marginBottom: '2px' }}>
+                        ≈ -${toUSD(potentialLossOnSL)} USD / USDT
+                      </div>
+                    )}
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                       Stop Loss: {slNum > 0 ? slNum : 'Set SL'}
                     </span>

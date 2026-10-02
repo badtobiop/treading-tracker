@@ -23,13 +23,7 @@ export default function AiCopilotModal({
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: `Hello! 👋 I am your **Gemini AI Trading Copilot**.
-You can ask me anything regarding your trading performance, quantitative metrics, or risk management:
-- *"Which day of the week generates my highest profitability?"*
-- *"What is my historical win rate and net return on Gold (XAUUSD)?"*
-- *"Where are my primary psychological or discipline leaks?"*
-
-Type your query below or click one of the quick analysis templates!`
+      text: 'Hello! 👋 How can I help you today? You can ask me any trading questions, or ask me to review your trade metrics!'
     }
   ]);
   const [inputQuery, setInputQuery] = useState('');

@@ -44,7 +44,7 @@ export default function FloatingAiWidget({
   const [chatMessages, setChatMessages] = useState([
     {
       role: 'assistant',
-      text: 'Hello! 👋 I am your Gemini AI Trading Copilot.\n\nYou can speak or type your trades here for immediate automatic logging, or ask me for quantitative performance audits, win-rate insights, and risk analytics.'
+      text: 'Hello! 👋 How can I help you today? You can ask me any trading questions, or dictate trades to log them directly into your journal.'
     }
   ]);
   const [chatInput, setChatInput] = useState('');

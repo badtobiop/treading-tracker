@@ -2,10 +2,12 @@
 
 // Dynamic model fallback chain for high uptime & zero downtime during demand spikes
 const GEMINI_MODELS = [
-  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
   'gemini-3.5-flash',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash'
+  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.8-flash'
 ];
 
 /**
@@ -239,99 +241,68 @@ User Statement: "${promptText}"
 export async function getAiTradingAdvice(trades = [], question = '', apiKey = '') {
   const activeKey = getActiveApiKey(apiKey);
 
-  // If no API key is provided at all, return high-quality smart local assistance
-  if (!activeKey) {
-    return generateSmartLocalResponse(trades, question);
-  }
-
-  const tradeSummary = (trades || []).slice(-15).map(t => ({
-    date: t.date,
+  const tradeSummary = (trades || []).slice(-10).map(t => ({
     asset: t.asset,
     type: t.type,
     pnl: t.pnl,
     rr: t.riskRewardRatio,
-    strategy: t.strategy,
-    emotion: t.emotion,
-    rulesFollowed: t.rulesFollowed
+    strategy: t.strategy
   }));
 
-  const systemPrompt = `
-You are "TradeMatrix AI", an elite institutional trading mentor, quantitative risk analyst, and companion.
-You communicate with clarity, empathy, and mathematical rigor.
+  const systemPrompt = `You are Gemini, a helpful, smart, and friendly AI assistant inside the TradeMatrix trading journal.
 
-Guidelines:
-1. Always respond in polished, institutional-grade, professional English with mathematical clarity and actionable trading insights.
-2. If the user asks a general trading question (e.g., risk management, position sizing, support/resistance, market psychology, setups, discipline tips):
-   - Provide a direct, highly practical, structured answer with actionable tips and markdown formatting.
-3. If the user asks to analyze their trades, performance, or win-rate:
-   - Review their recorded trades below and provide a quantitative breakdown (Win rate, best asset, edge, leaks).
-   - If they have 0 recorded trades, warmly explain how to log trades or use the Lot Calculator to start.
+Instructions:
+- Talk naturally, concisely, and simply, just like the official Google Gemini (gemini.google.com).
+- Answer directly and plainly. Do NOT dump long lectures, unnecessary headers, or complex jargon unless specifically requested.
+- If the user says "hi", "hello", or chats casually, reply warmly in 1 short sentence (e.g. "Hi! How can I help you today?").
+- If the user asks a question about trading (risk, stop loss, psychology, setups), give a clear, simple, practical answer in 2-3 short bullet points or sentences.
+- If the user asks in Hindi or Hinglish, reply naturally in simple Hindi/Hinglish. If in English, reply in clear, simple English.
+- Keep responses easy to understand for any trader.
 
-Current User Recorded Trades (${trades.length} trades recorded):
-${JSON.stringify(tradeSummary, null, 2)}
+User's logged trades context (${trades.length} trades recorded):
+${tradeSummary.length > 0 ? JSON.stringify(tradeSummary) : 'No trades logged yet.'}
 
-User Question / Message:
-"${question}"
-`;
+User message:
+"${question}"`;
 
-  try {
-    const result = await callGeminiWithFallback(systemPrompt, activeKey, { temperature: 0.4 });
-    if (result?.text) {
-      return result.text;
+  if (activeKey) {
+    try {
+      const result = await callGeminiWithFallback(systemPrompt, activeKey, { temperature: 0.5 });
+      if (result?.text) {
+        return result.text;
+      }
+    } catch (err) {
+      console.error('Error fetching advice from Gemini:', err);
     }
-  } catch (err) {
-    console.error('Error fetching advice from Gemini:', err);
   }
 
-  // Graceful smart local fallback
+  // Simple, friendly fallback
   return generateSmartLocalResponse(trades, question);
 }
 
 /**
- * Smart Local AI Engine (Used when offline or network fails)
+ * Smart Local AI Fallback (Clean, simple, and direct)
  */
 function generateSmartLocalResponse(trades, question) {
   const q = (question || '').toLowerCase();
 
-  if (q.includes('risk') || q.includes('capital') || q.includes('10000') || q.includes('10k') || q.includes('2%')) {
-    return `### 🛡️ Smart Risk Management Rules (Capital Protection):
-
-1. **The 1% - 2% Rule**:
-   - On ₹10,000 capital, your maximum risk per trade should never exceed **₹100 to ₹200 (1-2%)**.
-   - If you experience 5 consecutive losing trades, you only lose ₹1,000, leaving 90% of your account intact!
-
-2. **Position Sizing Formula**:
-   $$\\text{Position Size} = \\frac{\\text{Risk Amount (₹200)}}{\\text{Stop Loss Distance}}$$
-   - Always adjust your quantity based on your Stop Loss, not your emotions.
-
-3. **Risk-to-Reward Minimum (1:2)**:
-   - Never enter a trade where the target reward is less than 2x your risk. With a 1:2 R:R, even a 40% win rate keeps you profitable.`;
+  if (q.includes('hi') || q.includes('hello') || q.includes('hey') || q.includes('namaste')) {
+    return "Hi there! 👋 How can I help you today with your trading?";
   }
 
-  if (q.includes('nifty') || q.includes('banknifty') || q.includes('market')) {
-    return `### 📈 Index & Market Strategy Protocol:
-- **Trend Alignment**: Always check the 1-Hour and 15-Minute market structure before taking intraday entries.
-- **Key Levels**: Mark Previous Day High (PDH), Previous Day Low (PDL), and Opening 15-Minute Range.
-- **Disciplined Execution**: Avoid trading in the first 5 minutes of market open to avoid slippage.`;
+  if (q.includes('risk') || q.includes('capital') || q.includes('loss') || q.includes('sl') || q.includes('stop loss')) {
+    return "Keep it simple: Never risk more than 1% to 2% of your capital on a single trade. Always set a Stop Loss before entering, and aim for at least a 1:2 Risk-to-Reward ratio.";
   }
 
-  if (!trades || trades.length === 0) {
-    return `Hello! 👋 I am your **TradeMatrix AI Trading Copilot**.
-
-You haven't logged any trades yet. You can:
-1. Speak or type your executed trade in the chat to automatically record it.
-2. Use the **Lot Calculator** to calculate exact position sizes (₹10k, ₹5k, or ₹2k) based on your stop loss.
-3. Ask me any questions about trading setups, risk management, or market discipline!`;
+  if (q.includes('nifty') || q.includes('banknifty') || q.includes('gold') || q.includes('market')) {
+    return "Always check the higher timeframe trend (1-Hour / 15-Minute) and mark Key Support & Resistance levels before entering trades.";
   }
 
-  const wins = trades.filter(t => (t.pnl || 0) > 0);
-  const losses = trades.filter(t => (t.pnl || 0) < 0);
-  const winRate = trades.length > 0 ? ((wins.length / trades.length) * 100).toFixed(1) : 0;
-  const netPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+  if (trades && trades.length > 0) {
+    const wins = trades.filter(t => (t.pnl || 0) > 0);
+    const netPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+    return `You have ${trades.length} recorded trades (${wins.length} wins). Net P&L: ${netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}. Feel free to ask about any specific trade!`;
+  }
 
-  return `### 📊 Trading Performance Audit:
-- **Total Trades**: ${trades.length} (${wins.length} Wins / ${losses.length} Losses)
-- **Win Rate**: **${winRate}%**
-- **Net Realized P&L**: **${netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}**
-- **Discipline Tip**: Maintain a strict stop loss in the system for every open position and protect your winning streaks.`;
+  return "I'm your Gemini AI trading assistant. Feel free to ask any trading questions, or dictate your trade details to log them directly!";
 }

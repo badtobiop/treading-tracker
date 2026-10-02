@@ -73,9 +73,10 @@ export default function LogTradeModal({
     notes: ''
   });
 
-  // Leverage selection for position sizer
-  const [leverage, setLeverage] = useState(1);
+  // Leverage selection for position sizer (default 50x for Gold / Forex)
+  const [leverage, setLeverage] = useState(50);
   const [customCapital, setCustomCapital] = useState(null);
+  const [riskRupees, setRiskRupees] = useState(200);
 
   // Strategy rules checklist state (ruleIndex: boolean)
   const [checkedRules, setCheckedRules] = useState({});
@@ -148,10 +149,10 @@ export default function LogTradeModal({
   const potentialProfitOnTP = currentQty > 0 && rewardDist > 0 ? (currentQty * rewardDist) : 0;
   const potentialLossOnSL = currentQty > 0 && riskDist > 0 ? (currentQty * riskDist) : 0;
 
-  // Position Sizing based on Capital and Risk % (e.g. 10k ka 2% = 200)
+  // Position Sizing based on Capital and Risk Rupees (User specifies exact loss e.g. 200 rs)
   const currentCapital = customCapital !== null ? customCapital : (accountCapital > 0 ? accountCapital : 10000);
-  const userRiskPercent = parseFloat(formData.capitalRiskedPercent) || 2.0;
-  const targetRiskRupees = (currentCapital * userRiskPercent) / 100; // e.g. 10000 * 2% = 200
+  const targetRiskRupees = parseFloat(riskRupees) > 0 ? parseFloat(riskRupees) : 200;
+  const userRiskPercent = currentCapital > 0 ? ((targetRiskRupees / currentCapital) * 100).toFixed(1) : '2.0';
 
   // Exact quantity needed so that SL loss is EXACTLY targetRiskRupees
   const exactUnitsNeeded = riskDist > 0 ? (targetRiskRupees / riskDist) : 0;
@@ -571,23 +572,34 @@ export default function LogTradeModal({
                   </button>
                 </div>
 
-                {/* POSITION SIZER & RISK CALCULATOR (User requirement: 10k ka 2% risk pe kitne ki trade lu?) */}
-                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(56, 189, 248, 0.04)', padding: '14px', borderRadius: '10px', border: '1px dashed rgba(56, 189, 248, 0.3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calculator size={15} style={{ color: 'var(--accent-cyan)' }} />
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Position Size & 2% Risk Calculator (Kitne Rupaye Ki Trade Lein?)
-                      </span>
+                {/* POSITION SIZER & RISK CALCULATOR (User requirement: 10k me se kitne rs ki trade lu taaki sirf 200 loss ho?) */}
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'linear-gradient(145deg, rgba(20, 25, 45, 0.95), rgba(15, 23, 42, 0.95))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.4)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+                  
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Calculator size={16} style={{ color: 'var(--accent-cyan)' }} />
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: '0.88rem', color: '#fff' }}>
+                          ⚡ Smart Trade Sizer (10k me se kitne ka trade lu?)
+                        </strong>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          Calculates exact trade rupees so SL loss is strictly ₹{targetRiskRupees}
+                        </div>
+                      </div>
                     </div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', fontWeight: 700, background: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '4px' }}>
-                      Planned SL Loss: {currency}{targetRiskRupees.toFixed(0)} ({userRiskPercent}%)
+
+                    <span style={{ fontSize: '0.75rem', color: 'var(--profit)', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      Strict SL Loss: -{currency}{targetRiskRupees.toFixed(0)} ({userRiskPercent}%)
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                  {/* Sizer Controls: Capital, Risk Rupees, Leverage */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '14px' }}>
                     <div>
-                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Total Capital ({currency})</label>
+                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Aapka Total Capital ({currency})</label>
                       <input 
                         type="number"
                         className="form-input"
@@ -599,15 +611,16 @@ export default function LogTradeModal({
                     </div>
 
                     <div>
-                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Max Risk (%)</label>
+                      <label className="form-label" style={{ fontSize: '0.72rem' }}>
+                        <span>Aapka Max Risk ({currency}) *</span>
+                      </label>
                       <input 
                         type="number"
-                        step="0.5"
                         className="form-input"
-                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
-                        value={formData.capitalRiskedPercent}
-                        onChange={e => handleInputChange('capitalRiskedPercent', e.target.value)}
-                        placeholder="2"
+                        style={{ padding: '6px 10px', fontSize: '0.85rem', borderColor: 'var(--accent-cyan)', fontWeight: 700 }}
+                        value={riskRupees}
+                        onChange={e => setRiskRupees(e.target.value)}
+                        placeholder="200"
                       />
                     </div>
 
@@ -619,48 +632,74 @@ export default function LogTradeModal({
                         value={leverage}
                         onChange={e => setLeverage(parseFloat(e.target.value) || 1)}
                       >
-                        <option value="1">1x (No Leverage / Cash)</option>
-                        <option value="5">5x (Intraday Stocks)</option>
-                        <option value="10">10x (Crypto / Futures)</option>
-                        <option value="20">20x</option>
-                        <option value="50">50x (Forex / Gold)</option>
+                        <option value="50">50x (Gold / Forex - Recommended)</option>
                         <option value="100">100x (High Leverage)</option>
+                        <option value="20">20x (Crypto / Futures)</option>
+                        <option value="10">10x (Crypto)</option>
+                        <option value="5">5x (Intraday Stocks)</option>
+                        <option value="1">1x (Cash - No Leverage)</option>
                       </select>
                     </div>
                   </div>
 
-                  {/* Sizing Recommendations Box */}
+                  {/* Sizing Recommendations Answers Box */}
                   {riskDist > 0 ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 14px', borderRadius: '8px', flexWrap: 'wrap', gap: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-                          Sized for exact <strong style={{ color: 'var(--loss)' }}>-{currency}{targetRiskRupees.toFixed(0)} loss on SL</strong>:
+                    <div style={{ background: 'rgba(0, 0, 0, 0.45)', borderRadius: '10px', padding: '14px', border: '1px solid rgba(56, 189, 248, 0.35)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                        {/* Answer 1: Kitne rupaye ka trade lu */}
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid var(--profit)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
+                            👉 {currentCapital.toFixed(0)} me se kitne ka trade lu?
+                          </span>
+                          <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--profit)', margin: '2px 0' }}>
+                            {currency}{marginNeededWithLeverage.toFixed(0)}
+                          </div>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                            {leverage > 1 ? `(${leverage}x Leverage Margin)` : '(Full Cash Value)'}
+                          </span>
                         </div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
-                          👉 Quantity: <span style={{ color: 'var(--accent-cyan)' }}>{exactUnitsNeeded.toFixed(2)} Units</span>
-                          {' | '} 
-                          Trade Value: <span>{currency}{totalPositionValue.toFixed(0)}</span>
-                          {leverage > 1 && (
-                            <span style={{ color: 'var(--profit)', marginLeft: '6px' }}>
-                              ({leverage}x Margin: {currency}{marginNeededWithLeverage.toFixed(0)})
-                            </span>
-                          )}
+
+                        {/* Answer 2: Kitni Quantity / Lot size lu */}
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid var(--accent-cyan)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
+                            👉 Kitni Quantity / Lots lu?
+                          </span>
+                          <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--accent-cyan)', margin: '2px 0' }}>
+                            {exactUnitsNeeded.toFixed(2)}
+                          </div>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                            Units / Shares (Total value {currency}{totalPositionValue.toFixed(0)})
+                          </span>
+                        </div>
+
+                        {/* Answer 3: SL & TP Impact */}
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid var(--loss)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
+                            👉 SL & TP Hit Result:
+                          </span>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--loss)', marginTop: '4px' }}>
+                            🛑 SL Hit: -{currency}{targetRiskRupees.toFixed(0)}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--profit)', marginTop: '2px' }}>
+                            🎯 TP Hit: +{currency}{(exactUnitsNeeded * rewardDist).toFixed(0)}
+                          </div>
                         </div>
                       </div>
 
+                      {/* 1-Click Apply Button */}
                       <button
                         type="button"
                         className="btn btn-primary"
-                        style={{ padding: '6px 14px', fontSize: '0.78rem', height: 'auto' }}
+                        style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, justifyContent: 'center' }}
                         onClick={handleApplyPositionSize}
-                        title="Form me yeh Quantity aur Amount daalein"
+                        title="Form me automatic trade size fill karein"
                       >
-                        ⚡ Apply This Size To Trade
+                        ⚡ 1-Click Auto-Fill (Ye Trade Size Form Me Daalo)
                       </button>
                     </div>
                   ) : (
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                      💡 Upar Entry Price aur Stop Loss (SL) daalein, taaki exact quantity aur margin calculate ho sake.
+                    <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.76rem', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                      💡 Upar <strong>Buy / Entry Price</strong> aur <strong>Stop Loss (SL)</strong> daalein — yeh calculator automatic bata dega ki 10k me se kitne rupaye ka trade lena hai taaki SL pe sirf ₹{targetRiskRupees} ka loss ho.
                     </div>
                   )}
                 </div>

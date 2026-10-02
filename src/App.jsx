@@ -16,7 +16,7 @@ import FloatingAiWidget from './components/FloatingAiWidget';
 import AuthPage from './components/AuthPage';
 import StarfieldCanvas from './components/StarfieldCanvas';
 
-import { INITIAL_TRADES, INITIAL_SETTINGS } from './data/initialData';
+import { INITIAL_TRADES, INITIAL_SETTINGS, DEFAULT_STRATEGIES_PLAYBOOK } from './data/initialData';
 import { calculateMetrics } from './utils/calculations';
 import { 
   getUserTrades, 
@@ -64,8 +64,32 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Strategy Playbook State (with customizable rules and concepts)
+  const [strategies, setStrategies] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('tradematrix_current_user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      const key = user?.email ? `tradematrix_strategies_${user.email}` : 'tradematrix_strategies';
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : DEFAULT_STRATEGIES_PLAYBOOK;
+    } catch (e) {
+      return DEFAULT_STRATEGIES_PLAYBOOK;
+    }
+  });
+
+  const handleSaveStrategies = (updated) => {
+    setStrategies(updated);
+    try {
+      const key = currentUser?.email ? `tradematrix_strategies_${currentUser.email}` : 'tradematrix_strategies';
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Trade Modal
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [preselectedStrategy, setPreselectedStrategy] = useState('');
 
   // Initialize Lenis Smooth Scroll on Window
   useEffect(() => {
@@ -264,6 +288,12 @@ export default function App() {
                 <StrategyVault 
                   trades={trades}
                   currency={settings.currency}
+                  strategies={strategies}
+                  onSaveStrategies={handleSaveStrategies}
+                  onLogTradeWithStrategy={(stratName) => {
+                    setPreselectedStrategy(stratName);
+                    setIsLogModalOpen(true);
+                  }}
                 />
               )}
 
@@ -293,16 +323,23 @@ export default function App() {
             onSaveTrade={handleSaveTrade}
             geminiApiKey={settings.geminiApiKey}
             currency={settings.currency}
+            strategies={strategies}
+            accountCapital={metrics.currentCapital}
           />
 
           {/* Manual / AI Log Modal */}
           <LogTradeModal 
             isOpen={isLogModalOpen}
-            onClose={() => setIsLogModalOpen(false)}
+            onClose={() => {
+              setIsLogModalOpen(false);
+              setPreselectedStrategy('');
+            }}
             onSaveTrade={handleSaveTrade}
             accountCapital={metrics.currentCapital}
             currency={settings.currency}
             geminiApiKey={settings.geminiApiKey}
+            strategies={strategies}
+            preselectedStrategy={preselectedStrategy}
           />
         </div>
       )}

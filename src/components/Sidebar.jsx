@@ -31,8 +31,8 @@ export default function Sidebar({
     { id: 'calendar', label: 'P&L Calendar', icon: Calendar, badge: 'Heatmap' },
     { id: 'analytics', label: 'Deep Analytics', icon: BarChart3, badge: 'Days & Assets' },
     { id: 'logbook', label: 'Trade Journal', icon: BookOpen, count: totalTradesCount },
-    { id: 'strategies', label: 'Strategy Vault', icon: Target },
-    { id: 'calculator', label: 'Risk Calculator', icon: Calculator },
+    { id: 'strategies', label: 'Strategy Playbook', icon: Target, badge: 'Rules' },
+    { id: 'calculator', label: 'Position Sizer', icon: Calculator, badge: 'Leverage' },
     { id: 'settings', label: 'Settings & Data', icon: Settings },
   ];
 

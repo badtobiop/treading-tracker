@@ -27,6 +27,7 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
   const [instrumentType, setInstrumentType] = useState('EQUITY_CASH'); // 'EQUITY_CASH', 'XAUUSD', 'BTCUSD', 'EURUSD', 'US30', 'NIFTY50'
   const [entryPrice, setEntryPrice] = useState(500);
   const [stopLoss, setStopLoss] = useState(480); // 4% SL by default -> 50% capital (₹5,000)
+  const [takeProfit, setTakeProfit] = useState(540); // 8% TP by default -> 1:2 R:R
   const [leverage, setLeverage] = useState(1); // 1x Spot/Cash by default
 
   // Preset Capital options
@@ -97,6 +98,11 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
   // Take Profit Targets for 1:2 and 1:3 R:R
   const target1to2 = isBuy ? entryPrice + (priceDiff * 2) : entryPrice - (priceDiff * 2);
   const target1to3 = isBuy ? entryPrice + (priceDiff * 3) : entryPrice - (priceDiff * 3);
+
+  // Custom User TP calculations
+  const tpDiff = Math.abs(takeProfit - entryPrice);
+  const customRR = priceDiff > 0 ? (tpDiff / priceDiff).toFixed(1) : '2.0';
+  const customRewardAmount = priceDiff > 0 ? dollarRisk * (tpDiff / priceDiff) : (dollarRisk * 2);
 
   // Preset Scenario Matrix Helper
   const calculateScenario = (scenarioSlPercent) => {
@@ -227,19 +233,19 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
                 onChange={e => {
                   const val = e.target.value;
                   setInstrumentType(val);
-                  if (val === 'EQUITY_CASH') { setEntryPrice(500); setStopLoss(480); setLeverage(1); }
-                  else if (val === 'XAUUSD') { setEntryPrice(2650); setStopLoss(2642); setLeverage(50); }
-                  else if (val === 'BTCUSD') { setEntryPrice(64000); setStopLoss(63200); setLeverage(1); }
-                  else if (val === 'EURUSD') { setEntryPrice(1.1180); setStopLoss(1.1155); setLeverage(100); }
-                  else if (val === 'NIFTY50') { setEntryPrice(25800); setStopLoss(25720); setLeverage(5); }
-                  else if (val === 'US30') { setEntryPrice(42300); setStopLoss(42150); setLeverage(20); }
+                  if (val === 'EQUITY_CASH') { setEntryPrice(500); setStopLoss(480); setTakeProfit(540); setLeverage(1); }
+                  else if (val === 'XAUUSD') { setEntryPrice(2650); setStopLoss(2642); setTakeProfit(2666); setLeverage(50); }
+                  else if (val === 'BTCUSD') { setEntryPrice(64000); setStopLoss(63200); setTakeProfit(65600); setLeverage(1); }
+                  else if (val === 'EURUSD') { setEntryPrice(1.1180); setStopLoss(1.1155); setTakeProfit(1.1230); setLeverage(100); }
+                  else if (val === 'NIFTY50') { setEntryPrice(25800); setStopLoss(25720); setTakeProfit(25960); setLeverage(5); }
+                  else if (val === 'US30') { setEntryPrice(42300); setStopLoss(42150); setTakeProfit(42600); setLeverage(20); }
                 }}
               >
                 <option value="EQUITY_CASH">🇮🇳 Indian Stocks / Cash Equities (₹ Share Buy/Sell)</option>
+                <option value="NIFTY50">📊 Nifty 50 Index (25 Qty Lot Contract)</option>
                 <option value="BTCUSD">🪙 Crypto Spot / Futures (BTC, ETH, Altcoins)</option>
                 <option value="XAUUSD">🥇 Gold (XAUUSD) - 100 oz Commodity Contract</option>
                 <option value="EURUSD">💱 EUR/USD & Forex (100k Currency Contract)</option>
-                <option value="NIFTY50">📊 Nifty 50 Index (25 Qty Lot Contract)</option>
                 <option value="US30">📈 US30 / Dow Jones Index</option>
               </select>
             </div>
@@ -268,6 +274,21 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
                 className="form-input" 
                 value={stopLoss}
                 onChange={e => setStopLoss(Number(e.target.value))}
+              />
+            </div>
+
+            {/* Take Profit Target Price */}
+            <div className="form-group full-width">
+              <label className="form-label">
+                <span>Take Profit Target (TP)</span>
+                <span style={{ color: 'var(--profit)' }}>1:{customRR} Risk:Reward (+{formatCurrency(customRewardAmount, activeCurrency)})</span>
+              </label>
+              <input 
+                type="number" 
+                step="any"
+                className="form-input" 
+                value={takeProfit}
+                onChange={e => setTakeProfit(Number(e.target.value))}
               />
             </div>
 
@@ -360,9 +381,33 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               </div>
             </div>
 
-            {/* Direct Explanation Note */}
-            <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(20, 7, 15, 0.6)', borderRadius: '10px', fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-              💡 <strong>How this protects you:</strong> If your stop loss of <strong>{slPercent.toFixed(2)}%</strong> is triggered, you will lose exactly <strong>{formatCurrency(dollarRisk, activeCurrency)} ({riskPercent}%)</strong>, leaving your remaining <strong>{formatCurrency(capital - dollarRisk, activeCurrency)}</strong> capital 100% safe.
+            {/* Direct Decision Verdict: "Kitne Rs ka trade lu?" */}
+            <div style={{ marginTop: '14px', padding: '14px', background: 'rgba(20, 7, 15, 0.75)', border: '1px solid rgba(244, 114, 182, 0.3)', borderRadius: '12px', fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--accent-rose)', fontWeight: 700 }}>
+                <Sparkles size={16} />
+                <span>💡 Verdict: "Kitne Rupaye Ka Trade Lu? Pure {activeCurrency}10k Ka Ya 3k-4k Ka?"</span>
+              </div>
+              <p style={{ margin: 0 }}>
+                {totalTradeValue >= capital ? (
+                  <>
+                    Aapka Stop Loss sirf <strong>{slPercent.toFixed(1)}%</strong> dur hai. Strict <strong>{riskPercent}% ({formatCurrency(dollarRisk, activeCurrency)})</strong> risk rule ke hisab se aap <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong> ka trade le sakte hain. 
+                    {leverage > 1 && (
+                      <span style={{ display: 'block', marginTop: '6px', color: 'var(--accent-cyan)' }}>
+                        ⚡ <strong>{leverage}x Leverage</strong> ke saath aapke account se sirf <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> cash margin lagega, aur baaki <strong>{formatCurrency(remainingCash, activeCurrency)}</strong> capital safe rahega!
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Aapko pure <strong>{formatCurrency(capital, activeCurrency)}</strong> ka trade <strong>NAHI</strong> lena chahiye! Sirf <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong> ka trade lein, taaki agar Stop Loss hit ho toh loss sirf <strong>{formatCurrency(dollarRisk, activeCurrency)} ({riskPercent}%)</strong> par hi ruk jaye.
+                    {leverage > 1 && (
+                      <span style={{ display: 'block', marginTop: '6px', color: 'var(--accent-cyan)' }}>
+                        ⚡ <strong>{leverage}x Leverage</strong> use karne par account se sirf <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> margin use hoga!
+                      </span>
+                    )}
+                  </>
+                )}
+              </p>
             </div>
           </div>
 

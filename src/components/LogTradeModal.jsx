@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Sparkles, 
@@ -11,11 +11,17 @@ import {
   TrendingDown, 
   Flame,
   ArrowRight,
-  PieChart
+  PieChart,
+  ShieldCheck,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Zap,
+  Layers
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { parseTradeWithAI } from '../services/geminiService';
-import { POPULAR_ASSETS, STRATEGIES } from '../data/initialData';
+import { POPULAR_ASSETS, STRATEGIES, DEFAULT_STRATEGIES_PLAYBOOK } from '../data/initialData';
 import { formatCurrency } from '../utils/calculations';
 
 export default function LogTradeModal({ 
@@ -23,8 +29,10 @@ export default function LogTradeModal({
   onClose, 
   onSaveTrade, 
   accountCapital = 10000, 
-  currency = '$',
-  geminiApiKey = '' 
+  currency = '₹',
+  geminiApiKey = '',
+  strategies = DEFAULT_STRATEGIES_PLAYBOOK,
+  preselectedStrategy = ''
 }) {
   const effectiveApiKey = geminiApiKey || import.meta.env?.VITE_GEMINI_API_KEY || '';
   const [activeTab, setActiveTab] = useState('ai'); // 'ai' or 'manual'
@@ -42,7 +50,7 @@ export default function LogTradeModal({
   const [formData, setFormData] = useState({
     date: today,
     time: currentTime,
-    asset: 'XAUUSD',
+    asset: 'NIFTY50',
     customAsset: '',
     type: 'BUY',
     entryPrice: '',
@@ -50,15 +58,58 @@ export default function LogTradeModal({
     stopLoss: '',
     takeProfit: '',
     lotSize: 1.0,
-    capitalRiskedPercent: 1.0,
+    capitalRiskedPercent: 2.0,
     pnl: '',
     riskRewardRatio: '2.0:1',
-    strategy: 'ICT Order Block',
+    strategy: preselectedStrategy || (strategies?.[0]?.name || '15m Range Breakout'),
     session: 'New York',
     emotion: 'Disciplined',
     rulesFollowed: true,
     notes: ''
   });
+
+  // Leverage selection for position sizer
+  const [leverage, setLeverage] = useState(1);
+
+  // Strategy rules checklist state (ruleIndex: boolean)
+  const [checkedRules, setCheckedRules] = useState({});
+
+  // Sync preselected strategy when modal opens
+  useEffect(() => {
+    if (preselectedStrategy) {
+      setFormData(prev => ({ ...prev, strategy: preselectedStrategy }));
+      setActiveTab('manual');
+    }
+  }, [preselectedStrategy]);
+
+  // Current selected strategy object
+  const currentStrategyObj = (strategies || []).find(
+    s => s.name?.toLowerCase() === formData.strategy?.toLowerCase()
+  ) || strategies?.[0];
+
+  // Reset checked rules when strategy changes
+  useEffect(() => {
+    if (currentStrategyObj?.rules) {
+      const initialMap = {};
+      currentStrategyObj.rules.forEach((_, idx) => {
+        initialMap[idx] = true; // Default to checked
+      });
+      setCheckedRules(initialMap);
+      setFormData(prev => ({ ...prev, rulesFollowed: true }));
+    }
+  }, [formData.strategy]);
+
+  // Toggle individual rule check
+  const handleToggleRule = (idx) => {
+    const updated = { ...checkedRules, [idx]: !checkedRules[idx] };
+    setCheckedRules(updated);
+
+    const totalRules = currentStrategyObj?.rules?.length || 0;
+    const checkedCount = Object.values(updated).filter(Boolean).length;
+    const allChecked = totalRules > 0 && checkedCount === totalRules;
+
+    setFormData(prev => ({ ...prev, rulesFollowed: allChecked }));
+  };
 
   if (!isOpen) return null;
 
@@ -83,14 +134,8 @@ export default function LogTradeModal({
 
     // Estimate PnL if exit is given and pnl is empty
     if (!isNaN(entry) && !isNaN(exit) && !updated.pnl) {
-      let multiplier = 100; // typical contract
-      if (updated.asset === 'BTCUSD') multiplier = 1;
-      else if (updated.asset === 'EURUSD' || updated.asset === 'GBPUSD') multiplier = 100000;
-      else if (updated.asset === 'XAUUSD') multiplier = 100;
-
       const diff = isBuy ? exit - entry : entry - exit;
-      const estimatedPnl = diff * lots * (updated.asset === 'BTCUSD' ? 1 : 100);
-      // Only set if reasonable
+      const estimatedPnl = diff * lots;
       if (!isNaN(estimatedPnl)) {
         updated.pnl = estimatedPnl.toFixed(2);
       }
@@ -99,97 +144,119 @@ export default function LogTradeModal({
     setFormData(updated);
   };
 
-  // Voice speech-to-text handler
+  // Live Position Sizing Calculations for Manual Form
+  const entryNum = parseFloat(formData.entryPrice) || 0;
+  const slNum = parseFloat(formData.stopLoss) || 0;
+  const tpNum = parseFloat(formData.takeProfit) || 0;
+  const riskPctNum = parseFloat(formData.capitalRiskedPercent) || 2.0;
+
+  const priceDiff = Math.abs(entryNum - slNum);
+  const slDistancePct = entryNum > 0 ? (priceDiff / entryNum) * 100 : 0;
+  const maxRiskAmount = accountCapital * (riskPctNum / 100);
+
+  let calculatedQuantity = 0;
+  let totalTradeValue = 0;
+  let marginRequired = 0;
+
+  if (priceDiff > 0 && entryNum > 0) {
+    calculatedQuantity = Math.floor(maxRiskAmount / priceDiff);
+    totalTradeValue = calculatedQuantity * entryNum;
+    marginRequired = totalTradeValue / (leverage > 0 ? leverage : 1);
+  }
+
+  // Voice speech recognition
   const toggleVoiceInput = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser. Please type your trade details.');
+      alert('Speech recognition is not supported in this browser. Please type trade details.');
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US'; // handles Hinglish numbers well
+    recognition.lang = 'en-US';
     recognition.interimResults = false;
 
     if (!isListening) {
-      recognition.start();
-      setIsListening(true);
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setAiPrompt(prev => prev ? `${prev} ${transcript}` : transcript);
+      try {
+        recognition.start();
+        setIsListening(true);
+        recognition.onresult = (e) => {
+          const transcript = e.results[0][0].transcript;
+          setAiPrompt(prev => prev ? `${prev} ${transcript}` : transcript);
+          setIsListening(false);
+        };
+        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => setIsListening(false);
+      } catch (err) {
         setIsListening(false);
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+      }
     } else {
       recognition.stop();
       setIsListening(false);
     }
   };
 
-  // AI Parse action
+  // AI Parse Trade
   const handleAiParse = async () => {
     if (!aiPrompt.trim()) return;
     setIsAiParsing(true);
     try {
-      const result = await parseTradeWithAI(aiPrompt, effectiveApiKey);
-      setParsedPreview(result);
-    } catch (e) {
-      console.error(e);
+      const parsed = await parseTradeWithAI(aiPrompt, effectiveApiKey);
+      setParsedPreview(parsed);
+    } catch (err) {
+      console.error(err);
+      alert('Error parsing trade with AI. Please use manual entry.');
     } finally {
       setIsAiParsing(false);
     }
   };
 
-  // Confirm and Save
-  const handleSave = (tradeObj) => {
-    const pnl = Number(tradeObj.pnl) || 0;
-    const pnlPercent = accountCapital > 0 ? Number(((pnl / accountCapital) * 100).toFixed(2)) : 0;
-
+  // Save Trade
+  const handleSave = (tradeData) => {
+    const finalAsset = tradeData.asset === 'CUSTOM' ? (tradeData.customAsset || 'CUSTOM') : tradeData.asset;
     const finalTrade = {
       id: `tr-${Date.now()}`,
-      date: tradeObj.date || today,
-      time: tradeObj.time || currentTime,
-      asset: tradeObj.asset === 'CUSTOM' ? tradeObj.customAsset : tradeObj.asset,
-      type: tradeObj.type || 'BUY',
-      entryPrice: Number(tradeObj.entryPrice) || 0,
-      exitPrice: Number(tradeObj.exitPrice) || 0,
-      stopLoss: Number(tradeObj.stopLoss) || 0,
-      takeProfit: Number(tradeObj.takeProfit) || 0,
-      lotSize: Number(tradeObj.lotSize) || 1.0,
-      capitalRiskedPercent: Number(tradeObj.capitalRiskedPercent) || 1.0,
-      pnl,
-      pnlPercent,
-      riskRewardRatio: tradeObj.riskRewardRatio || '2.0:1',
-      strategy: tradeObj.strategy || 'Discretionary',
-      session: tradeObj.session || 'New York',
-      emotion: tradeObj.emotion || 'Disciplined',
-      rulesFollowed: tradeObj.rulesFollowed ?? true,
-      notes: tradeObj.notes || ''
+      date: tradeData.date || today,
+      time: tradeData.time || currentTime,
+      asset: finalAsset || 'NIFTY50',
+      type: tradeData.type || 'BUY',
+      entryPrice: parseFloat(tradeData.entryPrice) || 0,
+      exitPrice: parseFloat(tradeData.exitPrice) || 0,
+      stopLoss: parseFloat(tradeData.stopLoss) || 0,
+      takeProfit: parseFloat(tradeData.takeProfit) || 0,
+      lotSize: parseFloat(tradeData.lotSize) || 1.0,
+      capitalRiskedPercent: parseFloat(tradeData.capitalRiskedPercent) || 2.0,
+      pnl: parseFloat(tradeData.pnl) || 0,
+      pnlPercent: accountCapital > 0 ? ((parseFloat(tradeData.pnl) || 0) / accountCapital) * 100 : 0,
+      riskRewardRatio: tradeData.riskRewardRatio || '2.0:1',
+      strategy: tradeData.strategy || '15m Range Breakout',
+      session: tradeData.session || 'New York',
+      emotion: tradeData.emotion || 'Disciplined',
+      rulesFollowed: tradeData.rulesFollowed ?? true,
+      notes: tradeData.notes || (activeTab === 'ai' ? aiPrompt : '')
     };
 
-    if (pnl > 0) {
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 }
-      });
+    if (finalTrade.pnl > 0) {
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.8 } });
     }
 
     onSaveTrade(finalTrade);
     onClose();
   };
 
+  // Rule counts
+  const totalRules = currentStrategyObj?.rules?.length || 0;
+  const checkedRulesCount = Object.values(checkedRules).filter(Boolean).length;
+  const isAllRulesFollowed = totalRules > 0 && checkedRulesCount === totalRules;
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" data-lenis-prevent="true" onClick={onClose}>
+      <div 
+        className="modal-content" 
+        data-lenis-prevent="true" 
+        onClick={e => e.stopPropagation()}
+        style={{ maxWidth: '720px' }}
+      >
         {/* Header */}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -198,7 +265,7 @@ export default function LogTradeModal({
             </div>
             <div>
               <h2 className="modal-title" style={{ fontSize: '1.2rem', fontWeight: 700 }}>Log Market Trade</h2>
-              <span className="card-subtitle">Record your execution for strategy calculations</span>
+              <span className="card-subtitle">Record execution, verify strategy rules, and calculate position size</span>
             </div>
           </div>
           <button className="btn-icon" onClick={onClose}>
@@ -220,12 +287,12 @@ export default function LogTradeModal({
               className={`tab-btn ${activeTab === 'manual' ? 'active' : ''}`}
               onClick={() => setActiveTab('manual')}
             >
-              <span>Precision Manual Entry</span>
+              <span>Precision Manual Entry & Rules Check</span>
             </button>
           </div>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body" data-lenis-prevent="true">
           {/* TAB 1: GEMINI AI QUICK LOG */}
           {activeTab === 'ai' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -238,15 +305,15 @@ export default function LogTradeModal({
                   {effectiveApiKey ? (
                     <span style={{ fontSize: '0.7rem', color: 'var(--profit)', fontWeight: 600 }}>● Gemini AI Connected (.env)</span>
                   ) : (
-                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)' }}>● Smart Heuristic AI Active</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)' }}>● Heuristic Parser Active</span>
                   )}
                 </div>
 
                 <div style={{ position: 'relative' }}>
                   <textarea 
-                    className="form-textarea"
+                    className="form-textarea" 
                     rows={3}
-                    placeholder='Dictate or type trade details: "Bought Gold at 2650, Stop Loss 2642, Take Profit 2670, 1.0 lot, closed with +$1,850 profit on Order Block strategy"'
+                    placeholder='Dictate or type: "Bought Nifty at 25800, Stop Loss 25750, Take Profit 25950, 50 qty, closed with profit ₹7500 on 15m Breakout strategy"'
                     value={aiPrompt}
                     onChange={e => setAiPrompt(e.target.value)}
                   />
@@ -266,10 +333,10 @@ export default function LogTradeModal({
                   </button>
                 </div>
 
-                {/* Quick Example Chips */}
+                {/* Preset Chips */}
                 <div>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-                    Preset Execution Templates (Click to fill):
+                    Preset Execution Templates:
                   </span>
                   <div className="ai-chips-list">
                     <button 
@@ -280,9 +347,9 @@ export default function LogTradeModal({
                     </button>
                     <button 
                       className="ai-chip"
-                      onClick={() => setAiPrompt("Bought Bitcoin at 64000, Take Profit 65200, 0.25 lot, closed at profit $400 on 15m Breakout")}
+                      onClick={() => setAiPrompt("Bought Nifty at 25800, SL 25740, TP 25950, 50 shares, closed at profit ₹10500 on 15m Range Breakout")}
                     >
-                      ₿ Bitcoin Long (+$400)
+                      📊 Nifty Long (+₹10,500)
                     </button>
                     <button 
                       className="ai-chip"
@@ -340,7 +407,7 @@ export default function LogTradeModal({
                     </div>
                     <div>
                       <span style={{ color: 'var(--text-muted)' }}>Lot Size:</span>
-                      <div>{parsedPreview.lotSize} Lots</div>
+                      <div>{parsedPreview.lotSize} Units</div>
                     </div>
                   </div>
 
@@ -371,288 +438,393 @@ export default function LogTradeModal({
             </div>
           )}
 
-          {/* TAB 2: PRECISION MANUAL ENTRY */}
+          {/* TAB 2: PRECISION MANUAL ENTRY & RULES CHECK */}
           {activeTab === 'manual' && (
-            <div className="form-grid">
-              {/* Asset & Type */}
-              <div className="form-group">
-                <label className="form-label">Asset / Market</label>
-                <select 
-                  className="form-select"
-                  value={formData.asset}
-                  onChange={e => setFormData({ ...formData, asset: e.target.value })}
-                >
-                  {POPULAR_ASSETS.map(a => (
-                    <option key={a.symbol} value={a.symbol}>{a.symbol} - {a.name}</option>
-                  ))}
-                  <option value="CUSTOM">+ Custom Asset</option>
-                </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              
+              {/* SECTION A: STRATEGY & RULES CHECKLIST ("Tune Saare Rule Follow Kiye Kya?") */}
+              <div style={{ background: 'rgba(25, 30, 50, 0.75)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '14px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                  <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                    Strategy Playbook Selection:
+                  </label>
+                  <select 
+                    className="form-select"
+                    style={{ width: 'auto', minWidth: '240px', padding: '6px 12px' }}
+                    value={formData.strategy}
+                    onChange={e => setFormData({ ...formData, strategy: e.target.value })}
+                  >
+                    {(strategies || []).map(s => (
+                      <option key={s.id || s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Strategy Concept Description */}
+                {currentStrategyObj?.description && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(0, 0, 0, 0.25)', padding: '8px 12px', borderRadius: '8px', marginBottom: '14px' }}>
+                    <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>💡 Setup Logic: </span>
+                    {currentStrategyObj.description}
+                  </div>
+                )}
+
+                {/* Interactive Rules Checklist */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckSquare size={16} style={{ color: isAllRulesFollowed ? 'var(--profit)' : 'var(--accent-rose)' }} />
+                      Checklist: Tune Saare Rule Follow Kiye Kya?
+                    </span>
+                    <span 
+                      style={{ 
+                        fontSize: '0.74rem', 
+                        fontWeight: 700,
+                        padding: '3px 10px', 
+                        borderRadius: '12px',
+                        background: isAllRulesFollowed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                        color: isAllRulesFollowed ? 'var(--profit)' : 'var(--loss)'
+                      }}
+                    >
+                      {checkedRulesCount} / {totalRules} Rules Followed
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {(currentStrategyObj?.rules || []).map((rule, idx) => {
+                      const isChecked = !!checkedRules[idx];
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => handleToggleRule(idx)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            background: isChecked ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                            border: isChecked ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.07)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {isChecked ? (
+                            <CheckSquare size={18} style={{ color: 'var(--profit)', flexShrink: 0 }} />
+                          ) : (
+                            <Square size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                          )}
+                          <span style={{ fontSize: '0.82rem', color: isChecked ? 'var(--text-primary)' : 'var(--text-muted)', textDecoration: isChecked ? 'none' : 'none' }}>
+                            {rule}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!isAllRulesFollowed && (
+                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--loss)', background: 'rgba(244, 63, 94, 0.08)', padding: '6px 12px', borderRadius: '6px' }}>
+                      <AlertTriangle size={14} />
+                      <span>Discipline Warning: Kuch rules miss ho rahe hain! Trade lene se pehle double check karein.</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {formData.asset === 'CUSTOM' ? (
+              {/* SECTION B: TRADE EXECUTION PARAMETERS */}
+              <div className="form-grid">
+                {/* Asset & Direction */}
                 <div className="form-group">
-                  <label className="form-label">Custom Symbol</label>
+                  <label className="form-label">Asset / Market</label>
+                  <select 
+                    className="form-select"
+                    value={formData.asset}
+                    onChange={e => setFormData({ ...formData, asset: e.target.value })}
+                  >
+                    {POPULAR_ASSETS.map(a => (
+                      <option key={a.symbol} value={a.symbol}>{a.symbol} - {a.name}</option>
+                    ))}
+                    <option value="CUSTOM">+ Custom Asset</option>
+                  </select>
+                </div>
+
+                {formData.asset === 'CUSTOM' ? (
+                  <div className="form-group">
+                    <label className="form-label">Custom Symbol</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. RELIANCE / SOLUSD"
+                      value={formData.customAsset}
+                      onChange={e => setFormData({ ...formData, customAsset: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label className="form-label">Order Direction</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className={`btn ${formData.type === 'BUY' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ flex: 1, background: formData.type === 'BUY' ? 'var(--profit)' : undefined }}
+                        onClick={() => setFormData({ ...formData, type: 'BUY' })}
+                      >
+                        BUY (Long)
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${formData.type === 'SELL' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ flex: 1, background: formData.type === 'SELL' ? 'var(--loss)' : undefined }}
+                        onClick={() => setFormData({ ...formData, type: 'SELL' })}
+                      >
+                        SELL (Short)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Date & Time */}
+                <div className="form-group">
+                  <label className="form-label">Execution Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={formData.date}
+                    onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Execution Time</label>
+                  <input 
+                    type="time" 
+                    className="form-input" 
+                    value={formData.time}
+                    onChange={e => setFormData({ ...formData, time: e.target.value })}
+                  />
+                </div>
+
+                {/* Entry Price & Stop Loss */}
+                <div className="form-group">
+                  <label className="form-label">Entry Price ({currency})</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="e.g. 500"
+                    value={formData.entryPrice}
+                    onChange={e => handlePriceChange('entryPrice', e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span>Stop Loss (SL)</span>
+                    {slDistancePct > 0 && (
+                      <span style={{ color: 'var(--loss)' }}>{slDistancePct.toFixed(2)}% Dist</span>
+                    )}
+                  </label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="e.g. 480"
+                    value={formData.stopLoss}
+                    onChange={e => handlePriceChange('stopLoss', e.target.value)}
+                  />
+                </div>
+
+                {/* Take Profit & Exit */}
+                <div className="form-group">
+                  <label className="form-label">Take Profit (TP)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="e.g. 540"
+                    value={formData.takeProfit}
+                    onChange={e => handlePriceChange('takeProfit', e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Exit / Closed Price</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="Leave blank if currently open"
+                    value={formData.exitPrice}
+                    onChange={e => handlePriceChange('exitPrice', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* SECTION C: POSITION SIZER & LEVERAGE BLUEPRINT ("Kitne Rs ka trade lu?") */}
+              <div style={{ background: 'rgba(20, 10, 25, 0.8)', border: '1px solid rgba(244, 114, 182, 0.35)', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calculator size={16} style={{ color: 'var(--accent-rose)' }} />
+                    Live Position Sizer: "Kitne Rs Ka Trade Lu?" (Capital: {formatCurrency(accountCapital, currency)})
+                  </span>
+                  
+                  {/* Leverage Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Leverage:</span>
+                    {[1, 2, 5, 10, 20].map(lev => (
+                      <button
+                        key={lev}
+                        type="button"
+                        className={`btn ${leverage === lev ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '3px 8px', fontSize: '0.72rem', minWidth: '28px', height: '26px' }}
+                        onClick={() => setLeverage(lev)}
+                      >
+                        {lev}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {priceDiff > 0 && entryNum > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', textAlign: 'center' }}>
+                    <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total Trade Value</span>
+                      <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                        {formatCurrency(totalTradeValue, currency)}
+                      </strong>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Margin ({leverage}x Lev)</span>
+                      <strong style={{ fontSize: '1.05rem', color: 'var(--accent-rose)', fontFamily: 'var(--font-mono)' }}>
+                        {formatCurrency(marginRequired, currency)}
+                      </strong>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Recommended Qty</span>
+                      <strong style={{ fontSize: '1.05rem', color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
+                        {calculatedQuantity} Units
+                      </strong>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Max Risk on SL</span>
+                      <strong style={{ fontSize: '1.05rem', color: 'var(--loss)', fontFamily: 'var(--font-mono)' }}>
+                        -{formatCurrency(maxRiskAmount, currency)} ({riskPctNum}%)
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Enter <strong>Entry Price</strong> and <strong>Stop Loss</strong> above to calculate exact position size and margin required.
+                  </p>
+                )}
+
+                {calculatedQuantity > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      💡 Verdict: 2% risk limit ke liye aapko <strong>{calculatedQuantity} quantity ({formatCurrency(totalTradeValue, currency)})</strong> ka trade lena chahiye.
+                    </span>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.76rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => setFormData({ ...formData, lotSize: calculatedQuantity })}
+                    >
+                      <Zap size={13} className="text-profit" />
+                      <span>Apply {calculatedQuantity} Qty</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION D: POSITION SIZE, R:R, & PNL */}
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Position Quantity / Lots (Form Value)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="1.0"
+                    value={formData.lotSize}
+                    onChange={e => handlePriceChange('lotSize', e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Risk % of Capital</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    className="form-input" 
+                    placeholder="2.0"
+                    value={formData.capitalRiskedPercent}
+                    onChange={e => setFormData({ ...formData, capitalRiskedPercent: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Risk : Reward Ratio</label>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="e.g. SOLUSD"
-                    value={formData.customAsset}
-                    onChange={e => setFormData({ ...formData, customAsset: e.target.value.toUpperCase() })}
+                    placeholder="2.0:1"
+                    value={formData.riskRewardRatio}
+                    onChange={e => setFormData({ ...formData, riskRewardRatio: e.target.value })}
                   />
                 </div>
-              ) : (
+
                 <div className="form-group">
-                  <label className="form-label">Order Direction</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      className={`btn ${formData.type === 'BUY' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ flex: 1, background: formData.type === 'BUY' ? 'var(--profit)' : undefined }}
-                      onClick={() => setFormData({ ...formData, type: 'BUY' })}
-                    >
-                      BUY (Long)
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn ${formData.type === 'SELL' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ flex: 1, background: formData.type === 'SELL' ? 'var(--loss)' : undefined }}
-                      onClick={() => setFormData({ ...formData, type: 'SELL' })}
-                    >
-                      SELL (Short)
-                    </button>
-                  </div>
+                  <label className="form-label">Net Realized P&L ({currency})</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input" 
+                    placeholder="+1500 or -200"
+                    value={formData.pnl}
+                    onChange={e => setFormData({ ...formData, pnl: e.target.value })}
+                  />
                 </div>
-              )}
 
-              {/* Date & Time */}
-              <div className="form-group">
-                <label className="form-label">Execution Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Execution Time</label>
-                <input 
-                  type="time" 
-                  className="form-input" 
-                  value={formData.time}
-                  onChange={e => setFormData({ ...formData, time: e.target.value })}
-                />
-              </div>
-
-              {/* Entry & Exit Prices */}
-              <div className="form-group">
-                <label className="form-label">Entry Price</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="e.g. 2650.00"
-                  value={formData.entryPrice}
-                  onChange={e => handlePriceChange('entryPrice', e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Exit / Closed Price</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="e.g. 2668.50"
-                  value={formData.exitPrice}
-                  onChange={e => handlePriceChange('exitPrice', e.target.value)}
-                />
-              </div>
-
-              {/* SL & TP */}
-              <div className="form-group">
-                <label className="form-label">Stop Loss (SL)</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="e.g. 2642.00"
-                  value={formData.stopLoss}
-                  onChange={e => handlePriceChange('stopLoss', e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Take Profit (TP)</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="e.g. 2670.00"
-                  value={formData.takeProfit}
-                  onChange={e => handlePriceChange('takeProfit', e.target.value)}
-                />
-              </div>
-
-              {/* Lot Size & Capital Risk % */}
-              <div className="form-group">
-                <label className="form-label">Position / Lot Size</label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="1.0"
-                  value={formData.lotSize}
-                  onChange={e => handlePriceChange('lotSize', e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Risk % of Capital</label>
-                <input 
-                  type="number" 
-                  step="0.1"
-                  className="form-input" 
-                  placeholder="2.0%"
-                  value={formData.capitalRiskedPercent}
-                  onChange={e => setFormData({ ...formData, capitalRiskedPercent: e.target.value })}
-                />
-              </div>
-
-              {/* Live Position Value & Capital Allocation Indicator */}
-              {(() => {
-                const currentEntry = Number(formData.entryPrice) || 0;
-                const currentLots = Number(formData.lotSize) || 0;
-                const currentRiskPct = Number(formData.capitalRiskedPercent) || 0;
-                const estTradeValue = currentEntry > 0 && currentLots > 0 ? (currentLots * currentEntry) : 0;
-                const estRiskAmount = accountCapital * (currentRiskPct / 100);
-                const estCapAlloc = accountCapital > 0 && estTradeValue > 0 ? ((estTradeValue / accountCapital) * 100).toFixed(1) : null;
-
-                if (estTradeValue > 0 || estRiskAmount > 0) {
-                  return (
-                    <div className="full-width" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', padding: '10px 14px', background: 'rgba(244, 114, 182, 0.1)', border: '1px solid rgba(244, 114, 182, 0.25)', borderRadius: '10px', fontSize: '0.8rem', margin: '2px 0 10px 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
-                        <PieChart size={14} style={{ color: 'var(--accent-rose)' }} />
-                        <span>Total Trade Size: <strong>{formatCurrency(estTradeValue, currency)}</strong></span>
-                        {estCapAlloc && <span style={{ color: 'var(--accent-rose)', fontWeight: 700 }}>({estCapAlloc}% Capital)</span>}
-                      </div>
-                      {estRiskAmount > 0 && (
-                        <span style={{ color: 'var(--loss)', fontWeight: 700 }}>
-                          Max Risk: {formatCurrency(estRiskAmount, currency)} ({currentRiskPct}%)
-                        </span>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* R:R & Net P&L */}
-              <div className="form-group">
-                <label className="form-label">
-                  <span>Risk : Reward Ratio</span>
-                  <span style={{ color: 'var(--accent-cyan)' }}>Auto</span>
-                </label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="2.0:1"
-                  value={formData.riskRewardRatio}
-                  onChange={e => setFormData({ ...formData, riskRewardRatio: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  <span>Net Realized P&L ({currency})</span>
-                  <span style={{ color: 'var(--text-muted)' }}>+/- Amount</span>
-                </label>
-                <input 
-                  type="number" 
-                  step="any"
-                  className="form-input" 
-                  placeholder="+1850 or -250"
-                  value={formData.pnl}
-                  onChange={e => setFormData({ ...formData, pnl: e.target.value })}
-                />
-              </div>
-
-              {/* Strategy & Session */}
-              <div className="form-group">
-                <label className="form-label">Strategy Setup</label>
-                <select 
-                  className="form-select"
-                  value={formData.strategy}
-                  onChange={e => setFormData({ ...formData, strategy: e.target.value })}
-                >
-                  {STRATEGIES.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Session</label>
-                <select 
-                  className="form-select"
-                  value={formData.session}
-                  onChange={e => setFormData({ ...formData, session: e.target.value })}
-                >
-                  <option value="New York">New York Session</option>
-                  <option value="London">London Session</option>
-                  <option value="Asian">Asian Session</option>
-                </select>
-              </div>
-
-              {/* Discipline & Emotion */}
-              <div className="form-group">
-                <label className="form-label">Trade Emotion / State</label>
-                <select 
-                  className="form-select"
-                  value={formData.emotion}
-                  onChange={e => setFormData({ ...formData, emotion: e.target.value })}
-                >
-                  <option value="Disciplined">Disciplined (Rules Followed)</option>
-                  <option value="FOMO">FOMO (Chased Market)</option>
-                  <option value="Revenge">Revenge Trading</option>
-                  <option value="Greedy">Greedy (Moved TP)</option>
-                  <option value="Patient">Patient Wait</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Rules Followed?</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    className={`btn ${formData.rulesFollowed ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ flex: 1, background: formData.rulesFollowed ? 'var(--profit)' : undefined }}
-                    onClick={() => setFormData({ ...formData, rulesFollowed: true })}
+                <div className="form-group">
+                  <label className="form-label">Session</label>
+                  <select 
+                    className="form-select"
+                    value={formData.session}
+                    onChange={e => setFormData({ ...formData, session: e.target.value })}
                   >
-                    Yes (Strict Rules)
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${!formData.rulesFollowed ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ flex: 1, background: !formData.rulesFollowed ? 'var(--loss)' : undefined }}
-                    onClick={() => setFormData({ ...formData, rulesFollowed: false })}
-                  >
-                    No (Impulsive)
-                  </button>
+                    <option value="New York">New York Session</option>
+                    <option value="London">London Session</option>
+                    <option value="Asian">Asian Session</option>
+                  </select>
                 </div>
-              </div>
 
-              {/* Notes */}
-              <div className="form-group full-width">
-                <label className="form-label">Trade Notes / Why did you take this setup?</label>
-                <textarea 
-                  className="form-textarea"
-                  rows={2}
-                  placeholder="e.g. CPI news aftermath, bounce off 15m order block, swept liquidity..."
-                  value={formData.notes}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                />
+                <div className="form-group">
+                  <label className="form-label">Discipline State</label>
+                  <select 
+                    className="form-select"
+                    value={formData.emotion}
+                    onChange={e => setFormData({ ...formData, emotion: e.target.value })}
+                  >
+                    <option value="Disciplined">Disciplined</option>
+                    <option value="Patient">Patient Wait</option>
+                    <option value="FOMO">FOMO (Chased Market)</option>
+                    <option value="Revenge">Revenge Trading</option>
+                    <option value="Greedy">Greedy</option>
+                  </select>
+                </div>
+
+                <div className="form-group full-width">
+                  <label className="form-label">Trade Notes / Why did you take this setup?</label>
+                  <textarea 
+                    className="form-textarea"
+                    rows={2}
+                    placeholder="e.g. 15m breakout retest, clean rejection candle, follow through volume..."
+                    value={formData.notes}
+                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                  />
+                </div>
               </div>
             </div>
           )}

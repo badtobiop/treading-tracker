@@ -284,6 +284,12 @@ Instructions:
 - If the user says "hi", "hello", or chats casually, reply warmly in 1 short sentence (e.g. "Hi! How can I help you today?").
 - If the user asks a question about trading (risk, stop loss, psychology, setups), give a clear, simple, practical answer in 2-3 short bullet points or sentences.
 - If the user asks in Hindi or Hinglish, reply naturally in simple Hindi/Hinglish. If in English, reply in clear, simple English.
+- POSITION SIZING & CAPITAL ALLOCATION: If the user asks "kitne rupaye ka trade lu?", "pure 10k ka ya 3k-4k ka?", or gives capital, risk %, entry, SL, TP, or leverage:
+  1. Max risk amount = Capital * (Risk% / 100) (e.g. 10,000 * 2% = ₹200).
+  2. Total Position Size = (Max Risk / SL distance) * Entry Price.
+  3. Margin required = Total Position Size / Leverage.
+  4. Plain Hindi verdict: Explain directly whether to buy 3k, 4k, 5k, or full 10k worth, and how leverage reduces the initial margin while strictly keeping risk capped at 2%!
+- STRATEGY & RULES: Remind them to confirm all rules of their strategy checklist before taking the trade.
 - Keep responses easy to understand for any trader.
 
 ${tradeSummary.length > 0 ? `User's logged trades context (${trades.length} trades recorded):\n` + JSON.stringify(tradeSummary) : ''}
@@ -316,6 +322,14 @@ function generateSmartLocalResponse(trades, question, conversationHistory = []) 
 
   if (q.includes('hi') || q.includes('hello') || q.includes('hey') || q.includes('namaste')) {
     return "Hi there! 👋 How can I help you today with your trading?";
+  }
+
+  if (q.includes('kitne') || (q.includes('capital') && q.includes('risk')) || (q.includes('10k') && (q.includes('3k') || q.includes('4k') || q.includes('pure') || q.includes('leverage') || q.includes('lavrage')))) {
+    return "Direct Formula: Agar aapka capital ₹10,000 hai aur aap 2% (₹200) risk le rahe hain:\n\n• Tight SL (2% distance): Aap pure ₹10,000 ka trade le sakte hain (loss max ₹200).\n• Normal SL (4% distance): Pure 10k ka nahi, balki sirf ₹5,000 ka trade lena hai taaki loss ₹200 par hi ruke.\n• Wide SL (6-7% distance): Sirf ₹3,000 ka trade lena chahiye.\n• Leverage Ka Fayda: Agar aap 5x leverage use karte hain, toh ₹5,000 ke trade ke liye account se sirf ₹1,000 margin lagega aur baaki ₹9,000 capital safe rahega!";
+  }
+
+  if (q.includes('rule') || q.includes('strategy') || q.includes('stratargy')) {
+    return "Disciplined Rule: Trade lene se pehle Strategy Vault me jaakar apne setup ke saare rules check karein (Candle close, SL strictly placed, 1:2 RR minimum). Agar ek bhi rule miss ho raha ho toh trade mat lijiye!";
   }
 
   if (q.includes('risk') || q.includes('capital') || q.includes('loss') || q.includes('sl') || q.includes('stop loss')) {

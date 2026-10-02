@@ -2,8 +2,8 @@
 
 // Dynamic model fallback chain for high uptime & zero downtime during demand spikes
 const GEMINI_MODELS = [
-  'gemini-flash-latest',
   'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
   'gemini-3.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-flash-lite-latest',
@@ -234,11 +234,29 @@ User Statement: "${promptText}"
 }
 
 /**
+ * Sanitizes and cleans AI response text:
+ * - Strips all markdown asterisks (**bold**, *italic*, stray stars)
+ * - Converts bullet asterisks to clean bullet points (•)
+ * - Ensures plain, clean, human-friendly conversational text
+ */
+export function cleanAiResponse(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+  // Convert bullet asterisks at start of lines (* point) to clean bullets (• point)
+  cleaned = cleaned.replace(/^(\s*)\*+\s+/gm, '$1• ');
+  // Remove markdown bold asterisks **text**
+  cleaned = cleaned.replace(/\*\*/g, '');
+  // Remove markdown italic asterisks or stray single asterisks
+  cleaned = cleaned.replace(/\*/g, '');
+  return cleaned.trim();
+}
+
+/**
  * Conversational Trading Mentor & Quantitative Auditor
  * Handles both general chat questions (market knowledge, discipline, risk formulas) 
- * and detailed trade performance audits.
+ * and detailed trade performance audits with full conversational memory.
  */
-export async function getAiTradingAdvice(trades = [], question = '', apiKey = '') {
+export async function getAiTradingAdvice(trades = [], question = '', apiKey = '', conversationHistory = []) {
   const activeKey = getActiveApiKey(apiKey);
 
   const tradeSummary = (trades || []).slice(-10).map(t => ({
@@ -249,27 +267,37 @@ export async function getAiTradingAdvice(trades = [], question = '', apiKey = ''
     strategy: t.strategy
   }));
 
+  // Build clean history of up to last 8 messages so Gemini remembers full context
+  const recentHistory = (conversationHistory || [])
+    .filter(m => m && m.text && m.text.trim())
+    .slice(-8)
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${cleanAiResponse(m.text)}`)
+    .join('\n');
+
   const systemPrompt = `You are Gemini, a helpful, smart, and friendly AI assistant inside the TradeMatrix trading journal.
 
 Instructions:
 - Talk naturally, concisely, and simply, just like the official Google Gemini (gemini.google.com).
-- Answer directly and plainly. Do NOT dump long lectures, unnecessary headers, or complex jargon unless specifically requested.
+- Answer directly and plainly. Do NOT dump long lectures or unnecessary headers.
+- CRITICAL FORMATTING RULE: NEVER use asterisks or markdown bold stars (do NOT use ** or *). Write completely clean, plain, natural text without any asterisks or symbols.
+- MEMORY & CONTEXT: Carefully read the previous conversation below. If the user asks a follow-up or connected question (e.g. "aur usme?", "why?", "how much?", "explain that trade"), use the context of what was already discussed to answer accurately and seamlessly.
 - If the user says "hi", "hello", or chats casually, reply warmly in 1 short sentence (e.g. "Hi! How can I help you today?").
 - If the user asks a question about trading (risk, stop loss, psychology, setups), give a clear, simple, practical answer in 2-3 short bullet points or sentences.
 - If the user asks in Hindi or Hinglish, reply naturally in simple Hindi/Hinglish. If in English, reply in clear, simple English.
 - Keep responses easy to understand for any trader.
 
-User's logged trades context (${trades.length} trades recorded):
-${tradeSummary.length > 0 ? JSON.stringify(tradeSummary) : 'No trades logged yet.'}
+${tradeSummary.length > 0 ? `User's logged trades context (${trades.length} trades recorded):\n` + JSON.stringify(tradeSummary) : ''}
 
-User message:
+${recentHistory ? `Previous Conversation History (Context to remember):\n${recentHistory}\n` : ''}
+
+Current User message:
 "${question}"`;
 
   if (activeKey) {
     try {
       const result = await callGeminiWithFallback(systemPrompt, activeKey, { temperature: 0.5 });
       if (result?.text) {
-        return result.text;
+        return cleanAiResponse(result.text);
       }
     } catch (err) {
       console.error('Error fetching advice from Gemini:', err);
@@ -277,13 +305,13 @@ User message:
   }
 
   // Simple, friendly fallback
-  return generateSmartLocalResponse(trades, question);
+  return cleanAiResponse(generateSmartLocalResponse(trades, question, conversationHistory));
 }
 
 /**
  * Smart Local AI Fallback (Clean, simple, and direct)
  */
-function generateSmartLocalResponse(trades, question) {
+function generateSmartLocalResponse(trades, question, conversationHistory = []) {
   const q = (question || '').toLowerCase();
 
   if (q.includes('hi') || q.includes('hello') || q.includes('hey') || q.includes('namaste')) {

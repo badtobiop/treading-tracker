@@ -18,7 +18,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { parseTradeWithAI, getAiTradingAdvice } from '../services/geminiService';
+import { parseTradeWithAI, getAiTradingAdvice, cleanAiResponse } from '../services/geminiService';
 
 export default function FloatingAiWidget({ 
   trades, 
@@ -49,6 +49,14 @@ export default function FloatingAiWidget({
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatMessagesEndRef = useRef(null);
+
+  // Auto-scroll chat to bottom on new messages, loading status, or tab switch
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatLoading, activeTab]);
 
   // GSAP Smooth Opening Animation
   useEffect(() => {
@@ -206,15 +214,17 @@ export default function FloatingAiWidget({
     const q = queryText || chatInput;
     if (!q.trim() || isChatLoading) return;
 
-    setChatMessages(prev => [...prev, { role: 'user', text: q }]);
+    const userMessage = { role: 'user', text: q };
+    const updatedMessages = [...chatMessages, userMessage];
+    setChatMessages(updatedMessages);
     setChatInput('');
     setIsChatLoading(true);
 
     try {
-      const reply = await getAiTradingAdvice(trades, q, effectiveApiKey);
+      const reply = await getAiTradingAdvice(trades, q, effectiveApiKey, updatedMessages);
       setChatMessages(prev => [...prev, { role: 'assistant', text: reply }]);
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: 'assistant', text: 'Error retrieving performance analysis. Please try again.' }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', text: 'Error retrieving response. Please try again.' }]);
     } finally {
       setIsChatLoading(false);
     }
@@ -432,7 +442,7 @@ export default function FloatingAiWidget({
                         color: 'var(--text-primary)'
                       }}
                     >
-                      {m.text}
+                      {cleanAiResponse(m.text)}
                     </div>
                   ))}
                   {isChatLoading && (
@@ -441,6 +451,7 @@ export default function FloatingAiWidget({
                       <span>Gemini AI is analyzing your performance metrics...</span>
                     </div>
                   )}
+                  <div ref={chatMessagesEndRef} />
                 </div>
 
                 {/* Quick Chat Suggestions */}

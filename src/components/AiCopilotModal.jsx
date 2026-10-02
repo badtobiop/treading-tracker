@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Bot, 
   Sparkles, 
@@ -11,7 +11,7 @@ import {
   HelpCircle,
   Key
 } from 'lucide-react';
-import { getAiTradingAdvice } from '../services/geminiService';
+import { getAiTradingAdvice, cleanAiResponse } from '../services/geminiService';
 
 export default function AiCopilotModal({ 
   isOpen, 
@@ -28,8 +28,16 @@ export default function AiCopilotModal({
   ]);
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
 
   const effectiveApiKey = geminiApiKey || import.meta.env?.VITE_GEMINI_API_KEY || '';
+
+  // Auto-scroll chat to bottom on new messages, loading status, or modal open
+  useEffect(() => {
+    if (isOpen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isLoading, isOpen]);
 
   if (!isOpen) return null;
 
@@ -38,12 +46,13 @@ export default function AiCopilotModal({
     if (!textToSend.trim() || isLoading) return;
 
     const userMsg = { role: 'user', text: textToSend };
-    setMessages(prev => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInputQuery('');
     setIsLoading(true);
 
     try {
-      const response = await getAiTradingAdvice(trades, textToSend, effectiveApiKey);
+      const response = await getAiTradingAdvice(trades, textToSend, effectiveApiKey, updatedMessages);
       setMessages(prev => [...prev, { role: 'assistant', text: response }]);
     } catch (e) {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Error getting advice. Please try again.' }]);
@@ -93,7 +102,7 @@ export default function AiCopilotModal({
                 whiteSpace: 'pre-wrap'
               }}
             >
-              {m.text}
+              {cleanAiResponse(m.text)}
             </div>
           ))}
 
@@ -103,6 +112,7 @@ export default function AiCopilotModal({
               <span>Gemini AI is analyzing your trading records...</span>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Quick Suggested Prompts */}

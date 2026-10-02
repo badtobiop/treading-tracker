@@ -75,6 +75,7 @@ export default function LogTradeModal({
 
   // Leverage selection for position sizer
   const [leverage, setLeverage] = useState(1);
+  const [customCapital, setCustomCapital] = useState(null);
 
   // Strategy rules checklist state (ruleIndex: boolean)
   const [checkedRules, setCheckedRules] = useState({});
@@ -146,6 +147,66 @@ export default function LogTradeModal({
   // Exact profit if TP hit & exact loss if SL hit
   const potentialProfitOnTP = currentQty > 0 && rewardDist > 0 ? (currentQty * rewardDist) : 0;
   const potentialLossOnSL = currentQty > 0 && riskDist > 0 ? (currentQty * riskDist) : 0;
+
+  // Position Sizing based on Capital and Risk % (e.g. 10k ka 2% = 200)
+  const currentCapital = customCapital !== null ? customCapital : (accountCapital > 0 ? accountCapital : 10000);
+  const userRiskPercent = parseFloat(formData.capitalRiskedPercent) || 2.0;
+  const targetRiskRupees = (currentCapital * userRiskPercent) / 100; // e.g. 10000 * 2% = 200
+
+  // Exact quantity needed so that SL loss is EXACTLY targetRiskRupees
+  const exactUnitsNeeded = riskDist > 0 ? (targetRiskRupees / riskDist) : 0;
+  const totalPositionValue = exactUnitsNeeded > 0 && entryNum > 0 ? (exactUnitsNeeded * entryNum) : 0;
+  const marginNeededWithLeverage = leverage > 0 ? (totalPositionValue / leverage) : totalPositionValue;
+
+  // Set TP directly using desired Risk:Reward ratio (1.5, 2.0, 3.0)
+  const handleSetRR = (ratio) => {
+    if (entryNum <= 0 || slNum <= 0) {
+      alert('Pehle Buy/Entry Price aur Stop Loss (SL) daalein, taaki exact Target (TP) calculate ho sake!');
+      return;
+    }
+    const risk = Math.abs(entryNum - slNum);
+    let newTP = 0;
+    if (formData.type === 'BUY') {
+      newTP = entryNum + (risk * ratio);
+    } else {
+      newTP = entryNum - (risk * ratio);
+    }
+    newTP = parseFloat(newTP.toFixed(3));
+    
+    const updated = {
+      ...formData,
+      takeProfit: newTP,
+      riskRewardRatio: `1:${ratio.toFixed(1)}`
+    };
+
+    if (updated.outcome === 'TP_HIT' && currentQty > 0) {
+      updated.exitPrice = newTP;
+      updated.pnl = (currentQty * risk * ratio).toFixed(2);
+    }
+    setFormData(updated);
+  };
+
+  // Auto-apply calculated position size into form
+  const handleApplyPositionSize = () => {
+    if (exactUnitsNeeded <= 0) {
+      alert('Pehle Entry Price aur Stop Loss (SL) daalein!');
+      return;
+    }
+    const appliedQty = parseFloat(exactUnitsNeeded.toFixed(2));
+    const appliedAmt = parseFloat((leverage > 1 ? marginNeededWithLeverage : totalPositionValue).toFixed(2));
+    const updated = {
+      ...formData,
+      lotSize: appliedQty,
+      tradeAmount: appliedAmt
+    };
+
+    if (updated.outcome === 'TP_HIT' && rewardDist > 0) {
+      updated.pnl = (appliedQty * rewardDist).toFixed(2);
+    } else if (updated.outcome === 'SL_HIT' && riskDist > 0) {
+      updated.pnl = (-appliedQty * riskDist).toFixed(2);
+    }
+    setFormData(updated);
+  };
 
   // When Entry / SL / TP / Amount change, sync calculations
   const handleInputChange = (field, val) => {
@@ -468,6 +529,140 @@ export default function LogTradeModal({
                       required
                     />
                   </div>
+                </div>
+
+                {/* Quick R:R target preset buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Quick R:R Target Set:</span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.74rem', height: 'auto', background: 'rgba(255, 255, 255, 0.05)' }}
+                    onClick={() => handleSetRR(1.5)}
+                    title="Calculate TP for 1:1.5 Risk:Reward"
+                  >
+                    🎯 Set 1:1.5 TP
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ 
+                      padding: '4px 12px', 
+                      fontSize: '0.74rem', 
+                      height: 'auto', 
+                      background: 'rgba(56, 189, 248, 0.12)', 
+                      borderColor: 'var(--accent-cyan)', 
+                      color: 'var(--accent-cyan)',
+                      fontWeight: 700
+                    }}
+                    onClick={() => handleSetRR(2.0)}
+                    title="Calculate TP for 1:2.0 Risk:Reward"
+                  >
+                    🎯 Set 1:2.0 TP (Recommended)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.74rem', height: 'auto', background: 'rgba(255, 255, 255, 0.05)' }}
+                    onClick={() => handleSetRR(3.0)}
+                    title="Calculate TP for 1:3.0 Risk:Reward"
+                  >
+                    🎯 Set 1:3.0 TP
+                  </button>
+                </div>
+
+                {/* POSITION SIZER & RISK CALCULATOR (User requirement: 10k ka 2% risk pe kitne ki trade lu?) */}
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(56, 189, 248, 0.04)', padding: '14px', borderRadius: '10px', border: '1px dashed rgba(56, 189, 248, 0.3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calculator size={15} style={{ color: 'var(--accent-cyan)' }} />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Position Size & 2% Risk Calculator (Kitne Rupaye Ki Trade Lein?)
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', fontWeight: 700, background: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                      Planned SL Loss: {currency}{targetRiskRupees.toFixed(0)} ({userRiskPercent}%)
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Total Capital ({currency})</label>
+                      <input 
+                        type="number"
+                        className="form-input"
+                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        value={customCapital !== null ? customCapital : currentCapital}
+                        onChange={e => setCustomCapital(parseFloat(e.target.value) || 0)}
+                        placeholder="10000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Max Risk (%)</label>
+                      <input 
+                        type="number"
+                        step="0.5"
+                        className="form-input"
+                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        value={formData.capitalRiskedPercent}
+                        onChange={e => handleInputChange('capitalRiskedPercent', e.target.value)}
+                        placeholder="2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Leverage (Multiplier)</label>
+                      <select 
+                        className="form-select"
+                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        value={leverage}
+                        onChange={e => setLeverage(parseFloat(e.target.value) || 1)}
+                      >
+                        <option value="1">1x (No Leverage / Cash)</option>
+                        <option value="5">5x (Intraday Stocks)</option>
+                        <option value="10">10x (Crypto / Futures)</option>
+                        <option value="20">20x</option>
+                        <option value="50">50x (Forex / Gold)</option>
+                        <option value="100">100x (High Leverage)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Sizing Recommendations Box */}
+                  {riskDist > 0 ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)', padding: '10px 14px', borderRadius: '8px', flexWrap: 'wrap', gap: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+                          Sized for exact <strong style={{ color: 'var(--loss)' }}>-{currency}{targetRiskRupees.toFixed(0)} loss on SL</strong>:
+                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                          👉 Quantity: <span style={{ color: 'var(--accent-cyan)' }}>{exactUnitsNeeded.toFixed(2)} Units</span>
+                          {' | '} 
+                          Trade Value: <span>{currency}{totalPositionValue.toFixed(0)}</span>
+                          {leverage > 1 && (
+                            <span style={{ color: 'var(--profit)', marginLeft: '6px' }}>
+                              ({leverage}x Margin: {currency}{marginNeededWithLeverage.toFixed(0)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ padding: '6px 14px', fontSize: '0.78rem', height: 'auto' }}
+                        onClick={handleApplyPositionSize}
+                        title="Form me yeh Quantity aur Amount daalein"
+                      >
+                        ⚡ Apply This Size To Trade
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      💡 Upar Entry Price aur Stop Loss (SL) daalein, taaki exact quantity aur margin calculate ho sake.
+                    </div>
+                  )}
                 </div>
 
                 {/* Trade Investment Amount vs Quantity (User can input either 1k or Lot Size) */}

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import confetti from 'canvas-confetti';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -22,8 +23,68 @@ export default function Dashboard({
   metrics, 
   currency, 
   onNavigate, 
-  onOpenLogModal 
+  onOpenLogModal,
+  onUpdateTrade
 }) {
+  const [tradeToClose, setTradeToClose] = useState(null);
+  const [customExitPrice, setCustomExitPrice] = useState('');
+
+  // Handle Settle / Close Open Trade from Dashboard
+  const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
+    if (!trade) return;
+    const entry = parseFloat(trade.entryPrice) || 0;
+    const sl = parseFloat(trade.stopLoss) || 0;
+    const tp = parseFloat(trade.takeProfit) || 0;
+    const qty = parseFloat(trade.lotSize) || 1.0;
+    const isBuy = trade.type === 'BUY';
+
+    let exit = 0;
+    let pnl = 0;
+    let finalOutcome = outcomeType;
+
+    if (outcomeType === 'TP_HIT') {
+      exit = tp > 0 ? tp : entry;
+      const points = isBuy ? (exit - entry) : (entry - exit);
+      pnl = parseFloat((qty * points).toFixed(2));
+      finalOutcome = 'TP_HIT';
+    } else if (outcomeType === 'SL_HIT') {
+      exit = sl > 0 ? sl : entry;
+      const points = isBuy ? (exit - entry) : (entry - exit);
+      pnl = parseFloat((qty * points).toFixed(2));
+      finalOutcome = 'SL_HIT';
+    } else if (outcomeType === 'BREAKEVEN') {
+      exit = entry;
+      pnl = 0;
+      finalOutcome = 'BREAKEVEN';
+    } else if (outcomeType === 'CUSTOM') {
+      exit = parseFloat(overrideExit !== null ? overrideExit : customExitPrice) || entry;
+      const points = isBuy ? (exit - entry) : (entry - exit);
+      pnl = parseFloat((qty * points).toFixed(2));
+      if (pnl > 0) finalOutcome = 'TP_HIT';
+      else if (pnl < 0) finalOutcome = 'SL_HIT';
+      else finalOutcome = 'BREAKEVEN';
+    }
+
+    const updatedTrade = {
+      ...trade,
+      exitPrice: exit,
+      outcome: finalOutcome,
+      pnl: pnl,
+      closedAt: new Date().toISOString()
+    };
+
+    if (onUpdateTrade) {
+      onUpdateTrade(updatedTrade);
+    }
+
+    if (pnl > 0 || finalOutcome === 'TP_HIT') {
+      confetti({ particleCount: 65, spread: 70, origin: { y: 0.8 } });
+    }
+
+    setTradeToClose(null);
+    setCustomExitPrice('');
+  };
+
   const dayStats = calculateDayOfWeekStats(trades);
   const assetStats = calculateAssetStats(trades);
 
@@ -478,10 +539,30 @@ export default function Dashboard({
                           </div>
                         )}
                         {trade.outcome === 'OPEN' && (
-                          <div>
-                            <span style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginTop: '2px' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block' }}>
                               ⏳ OPEN
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => setTradeToClose(trade)}
+                              style={{
+                                fontSize: '0.65rem',
+                                padding: '2px 6px',
+                                background: 'rgba(56, 189, 248, 0.2)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.45)',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px'
+                              }}
+                              title="Trade khatam ho gayi? Close karein!"
+                            >
+                              ⚡ Settle
+                            </button>
                           </div>
                         )}
                       </td>
@@ -493,6 +574,184 @@ export default function Dashboard({
           )}
         </div>
       </div>
+
+      {/* Settle Open Trade Quick Modal */}
+      {tradeToClose && (
+        <div className="modal-overlay" data-lenis-prevent="true" onClick={() => setTradeToClose(null)}>
+          <div className="modal-content" data-lenis-prevent="true" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span className="asset-badge" style={{ fontSize: '1.1rem' }}>{tradeToClose.asset}</span>
+                <span className={`trade-type-pill ${tradeToClose.type.toLowerCase()}`}>
+                  {tradeToClose.type}
+                </span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Close & Settle Open Position</h3>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    Entry: {tradeToClose.entryPrice} | Lots: {tradeToClose.lotSize}
+                  </span>
+                </div>
+              </div>
+              <button className="btn-icon" onClick={() => setTradeToClose(null)}>✕</button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Ye trade market me complete ho gayi? Niche diye gaye option me se chunein ki <strong>TP Hit hua ya SL Hit</strong>:
+              </p>
+
+              {/* 3 Outcome Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+                {/* 1. 🎯 TP HIT */}
+                <button
+                  type="button"
+                  onClick={() => handleSettleTrade(tradeToClose, 'TP_HIT')}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '2px solid var(--profit)',
+                    borderRadius: '10px',
+                    padding: '14px 16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '1.8rem' }}>🎯</span>
+                    <div>
+                      <strong style={{ fontSize: '0.98rem', color: 'var(--profit)', display: 'block' }}>
+                        TP Hit Hua! (Target Achieved)
+                      </strong>
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                        Take Profit Price: <strong>{tradeToClose.takeProfit || 'TP'}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--profit)', fontWeight: 800 }}>
+                      +{currency}
+                      {tradeToClose.takeProfit && tradeToClose.entryPrice
+                        ? (Math.abs(parseFloat(tradeToClose.takeProfit) - parseFloat(tradeToClose.entryPrice)) * (parseFloat(tradeToClose.lotSize) || 1)).toFixed(0)
+                        : 'Profit'}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--profit)', display: 'block' }}>RECORD PROFIT</span>
+                  </div>
+                </button>
+
+                {/* 2. 🛑 SL HIT */}
+                <button
+                  type="button"
+                  onClick={() => handleSettleTrade(tradeToClose, 'SL_HIT')}
+                  style={{
+                    background: 'rgba(244, 63, 94, 0.12)',
+                    border: '2px solid var(--loss)',
+                    borderRadius: '10px',
+                    padding: '14px 16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '1.8rem' }}>🛑</span>
+                    <div>
+                      <strong style={{ fontSize: '0.98rem', color: 'var(--loss)', display: 'block' }}>
+                        SL Hit Hua! (Stop Loss Triggered)
+                      </strong>
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                        Stop Loss Price: <strong>{tradeToClose.stopLoss || 'SL'}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--loss)', fontWeight: 800 }}>
+                      -{currency}
+                      {tradeToClose.stopLoss && tradeToClose.entryPrice
+                        ? (Math.abs(parseFloat(tradeToClose.entryPrice) - parseFloat(tradeToClose.stopLoss)) * (parseFloat(tradeToClose.lotSize) || 1)).toFixed(0)
+                        : 'Loss'}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--loss)', display: 'block' }}>RECORD LOSS</span>
+                  </div>
+                </button>
+
+                {/* 3. ⚖️ BREAKEVEN */}
+                <button
+                  type="button"
+                  onClick={() => handleSettleTrade(tradeToClose, 'BREAKEVEN')}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '1.6rem' }}>⚖️</span>
+                    <div>
+                      <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
+                        Breakeven (Cost-to-Cost Exit)
+                      </strong>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                        Exit Price: {tradeToClose.entryPrice}
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                    {currency}0.00
+                  </span>
+                </button>
+              </div>
+
+              {/* 4. Custom Exit Price */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '10px', padding: '12px' }}>
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                  Ya koi aur exit price par close kiya?
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    type="number" 
+                    step="any"
+                    className="form-input"
+                    placeholder={`e.g. ${tradeToClose.entryPrice}`}
+                    value={customExitPrice}
+                    onChange={e => setCustomExitPrice(e.target.value)}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: '0.84rem' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '7px 16px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      if (!customExitPrice) {
+                        alert('Kripya exit price daalein!');
+                        return;
+                      }
+                      handleSettleTrade(tradeToClose, 'CUSTOM', customExitPrice);
+                    }}
+                  >
+                    Close At Price
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setTradeToClose(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

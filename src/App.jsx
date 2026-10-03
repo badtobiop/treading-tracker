@@ -179,6 +179,10 @@ export default function App() {
     setTrades(prev => [newTrade, ...prev]);
   };
 
+  const handleUpdateTrade = (updatedTrade) => {
+    setTrades(prev => prev.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+  };
+
   const handleDeleteTrade = (id) => {
     setTrades(prev => prev.filter(t => t.id !== id));
   };
@@ -257,6 +261,7 @@ export default function App() {
                   currency={settings.currency}
                   onNavigate={setActiveTab}
                   onOpenLogModal={() => setIsLogModalOpen(true)}
+                  onUpdateTrade={handleUpdateTrade}
                 />
               )}
 
@@ -281,6 +286,7 @@ export default function App() {
                   currency={settings.currency}
                   onDeleteTrade={handleDeleteTrade}
                   onOpenLogModal={() => setIsLogModalOpen(true)}
+                  onUpdateTrade={handleUpdateTrade}
                 />
               )}
 

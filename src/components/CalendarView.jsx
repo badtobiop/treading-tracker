@@ -14,8 +14,8 @@ import {
 import { generateMonthCalendar, formatCurrency } from '../utils/calculations';
 
 export default function CalendarView({ trades, currency, onSelectTrade }) {
-  // Current calendar view state (defaults to September 2026 or current date)
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1)); // September 2026
+  // Current calendar view state (defaults to real current month & year)
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDayData, setSelectedDayData] = useState(null);
 
   const year = currentDate.getFullYear();

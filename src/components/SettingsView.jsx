@@ -47,7 +47,7 @@ export default function SettingsView({
   const handleSendSupportMessage = async (e) => {
     e.preventDefault();
     if (!supportMessage.trim()) {
-      alert('Kripya apna message likhein!');
+      alert('Please enter your message before sending!');
       return;
     }
     setIsSending(true);
@@ -77,7 +77,7 @@ export default function SettingsView({
       }
     } catch (err) {
       console.error(err);
-      setSendError('Message bhejne me dikkat aayi. Aap direct utkarshdhakane2@gmail.com par bhi mail bhej sakte hain.');
+      setSendError('Failed to dispatch message. You can also email directly to utkarshdhakane2@gmail.com.');
     } finally {
       setIsSending(false);
     }
@@ -281,13 +281,13 @@ export default function SettingsView({
 
               <div>
                 <label className="form-label">
-                  <span>Apna Message / Sawaal Yahan Likhein *</span>
+                  <span>Your Message / Support Inquiry *</span>
                 </label>
                 <textarea 
                   className="form-input"
                   rows="4"
                   style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-                  placeholder="Hello Utkarsh, mujhe trade lagane ya calculation me ye puchna tha..."
+                  placeholder="Hello Utkarsh, I have a question regarding risk calculations, leverage, or trade tracking..."
                   value={supportMessage}
                   onChange={e => setSupportMessage(e.target.value)}
                   required
@@ -299,7 +299,7 @@ export default function SettingsView({
                 <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '8px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <CheckCircle2 size={18} style={{ color: 'var(--profit)', flexShrink: 0 }} />
                   <span style={{ fontSize: '0.84rem', color: '#ecfdf5', lineHeight: 1.45 }}>
-                    ✅ Aapka message Utkarsh ke Gmail (<strong>utkarshdhakane2@gmail.com</strong>) par bhej diya gaya hai! Jald hi aapko email par reply milega.
+                    ✅ Your message has been dispatched to Utkarsh's email (<strong>utkarshdhakane2@gmail.com</strong>)! You will receive a response shortly.
                   </span>
                 </div>
               )}

@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Check, X, ShieldAlert, Sparkles, HelpCircle } from 'lucide-react';
+import { AlertTriangle, Check, X, ShieldAlert, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
 
-// Common psychological and technical mistakes in trading
+// Common psychological and technical mistakes in trading (English)
 const COMMON_MISTAKES = [
-  { id: 'fomo', label: '⚡ FOMO Entry', text: 'FOMO: Chhuti hui candle dekh kar jaldbazi me entry li.' },
-  { id: 'early', label: '⏳ No Confirmation', text: 'Early Entry: Candle close ya retest confirmation ka wait nahi kiya.' },
-  { id: 'moved_sl', label: '🛑 Moved / Removed SL', text: 'SL Rule Break: Loss badhta dekh Stop-Loss peeche khiska diya.' },
-  { id: 'over_leverage', label: '📉 Over-Leveraged', text: 'Over-Leverage: Capital ke hisaab se bohot badi lot size le li.' },
-  { id: 'revenge', label: '💥 Revenge Trade', text: 'Revenge Trading: Pichhle loss ko recover karne ke gusse me trade liya.' },
-  { id: 'counter_trend', label: '🔄 Counter-Trend', text: 'Counter Trend: Strong higher timeframe trend ke against ghus gaya.' },
-  { id: 'news', label: '📰 High Impact News', text: 'News Volatility: High-impact economic news ke dauran trade liya.' },
-  { id: 'greed', label: '🎯 Greed at TP', text: 'Greed: Target hit hone par profit book nahi kiya aur trade reverse ho gayi.' },
-  { id: 'impatience', label: '😴 Impatience / Boredom', text: 'Boredom Trade: Setup banne se pehle hi bina reason trade le li.' }
+  { id: 'fomo', label: '⚡ FOMO Entry', text: 'FOMO: Chased a fast-moving candle without waiting for a proper setup.' },
+  { id: 'early', label: '⏳ No Confirmation', text: 'Early Entry: Did not wait for candle close or structural confirmation.' },
+  { id: 'moved_sl', label: '🛑 Moved / Widened SL', text: 'Rule Violation: Moved or widened Stop-Loss when trade moved against me.' },
+  { id: 'over_leverage', label: '📉 Over-Leveraged', text: 'Over-Leverage: Position size was far too large for current account balance.' },
+  { id: 'revenge', label: '💥 Revenge Trade', text: 'Revenge Trading: Traded emotionally to quickly recover a previous loss.' },
+  { id: 'counter_trend', label: '🔄 Counter-Trend', text: 'Counter-Trend: Fought against strong higher-timeframe trend momentum.' },
+  { id: 'news', label: '📰 High Impact News', text: 'News Volatility: Executed during unpredictable high-impact economic data.' },
+  { id: 'greed', label: '🎯 Greed at Target', text: 'Greed: Did not lock in profits at planned Take-Profit target.' },
+  { id: 'impatience', label: '😴 Impatience / Boredom', text: 'Boredom Trade: Took an unplanned trade without an edge or clear signal.' }
 ];
 
 export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, currency = '₹' }) {
@@ -23,7 +23,6 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
 
   useEffect(() => {
     if (trade) {
-      // If trade already has mistakeNote or lesson
       const existing = trade.mistakeNote || '';
       setMistakeText(existing);
       setLessonText(trade.lessonLearned || '');
@@ -32,15 +31,13 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
     }
   }, [trade]);
 
-  // Lock background page scroll and pause Lenis while modal is open
+  // Lock background page scroll while modal is open without breaking wheel event dispatch
   useEffect(() => {
     if (isOpen) {
       const origOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      window.__lenis?.stop();
       return () => {
         document.body.style.overflow = origOverflow;
-        window.__lenis?.start();
       };
     }
   }, [isOpen]);
@@ -53,7 +50,6 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
   const handleToggleTag = (tag) => {
     if (selectedTags.includes(tag.id)) {
       setSelectedTags(prev => prev.filter(t => t !== tag.id));
-      // Remove text if needed or leave as is
     } else {
       setSelectedTags(prev => [...prev, tag.id]);
       setMistakeText(prev => {
@@ -66,7 +62,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!mistakeText.trim() && !lessonText.trim()) {
-      alert('Kripya apni galti ya sikh (lesson) likhein!');
+      alert('Please describe what caused the mistake or your lesson learned.');
       return;
     }
 
@@ -74,41 +70,60 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
       ...trade,
       mistakeNote: mistakeText.trim(),
       lessonLearned: lessonText.trim(),
-      // Also ensure it is logged in notes if notes was empty
       notes: trade.notes 
-        ? trade.notes.includes('[GALTI / MISTAKE]:') 
+        ? (trade.notes.includes('[MISTAKE NOTE]:') || trade.notes.includes('[GALTI / MISTAKE]:'))
           ? trade.notes 
-          : `${trade.notes}\n\n[GALTI / MISTAKE]: ${mistakeText.trim()}`
-        : `[GALTI / MISTAKE]: ${mistakeText.trim()}`
+          : `${trade.notes}\n\n[MISTAKE NOTE]: ${mistakeText.trim()}`
+        : `[MISTAKE NOTE]: ${mistakeText.trim()}`
     };
 
     onSave(updatedTrade);
     setSavedSuccess(true);
     setTimeout(() => {
       onClose();
-    }, 700);
+    }, 600);
   };
 
   return (
-    <div className="modal-overlay" data-lenis-prevent="true" onClick={onClose} style={{ zIndex: 9999 }}>
+    <div 
+      className="modal-overlay" 
+      data-lenis-prevent="true" 
+      onClick={onClose} 
+      style={{ zIndex: 9999 }}
+      onWheel={e => e.stopPropagation()}
+    >
       <div 
         className="modal-content" 
         data-lenis-prevent="true" 
         onClick={e => e.stopPropagation()} 
-        style={{ maxWidth: '580px', border: '1px solid rgba(244, 63, 94, 0.35)', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
+        onWheel={e => e.stopPropagation()}
+        style={{ 
+          maxWidth: '600px', 
+          border: '1px solid rgba(244, 63, 94, 0.35)', 
+          boxShadow: '0 20px 50px rgba(0,0,0,0.65)' 
+        }}
       >
         {/* Header */}
-        <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px', flexShrink: 0 }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--loss)' }}>
+            <div style={{ 
+              width: '36px', 
+              height: '36px', 
+              borderRadius: '8px', 
+              background: 'rgba(244, 63, 94, 0.15)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'var(--loss)' 
+            }}>
               <AlertTriangle size={20} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Trade Post-Mortem & Galti Analysis
+              <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Trade Post-Mortem & Mistake Analysis
               </h3>
               <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                Galti likhne se trading psychology strong hoti hai aur yahi mistake dobara repeat nahi hoti
+                Documenting mistakes builds discipline and stops costly repeat errors.
               </span>
             </div>
           </div>
@@ -117,9 +132,17 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <div className="modal-body" data-lenis-prevent="true" style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, maxHeight: '68vh', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-            
+        <form 
+          onSubmit={handleSubmit} 
+          style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
+          onWheel={e => e.stopPropagation()}
+        >
+          <div 
+            className="modal-body" 
+            data-lenis-prevent="true" 
+            onWheel={e => e.stopPropagation()}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}
+          >
             {/* Trade Context Strip */}
             <div style={{
               background: 'rgba(244, 63, 94, 0.08)',
@@ -154,7 +177,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
             <div>
               <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                 <Sparkles size={14} style={{ color: 'var(--accent-amber)' }} />
-                Quick Select: Is trade me kya galti hui thi? (Tap to add)
+                Quick Select: What caused the loss? (Click to add)
               </label>
               
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
@@ -192,17 +215,17 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
             <div className="form-group">
               <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: '#fda4af', fontWeight: 700 }}>
-                  ⚠️ Meri kya galti thi? (Reason for SL Hit) *
+                  ⚠️ Root Cause of Mistake (Reason for Stop-Loss Trigger) *
                 </span>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  Apne words me likhein
+                  Explain in your own words
                 </span>
               </label>
               <textarea
                 className="form-textarea"
                 rows={4}
                 required
-                placeholder="e.g. Maine jaldbazi me bina candle confirmation ke entry li, leverage 50x bohot zyada tha aur support tutne par bhi trade hold ki..."
+                placeholder="e.g. Entered prematurely without waiting for 15m candle close, oversized position with 50x leverage, and held past invalidation level..."
                 value={mistakeText}
                 onChange={e => setMistakeText(e.target.value)}
                 style={{
@@ -219,7 +242,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
             <div className="form-group">
               <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>
-                  💡 Agli baar is galti se bachne ke liye kya rule follow karunga?
+                  💡 Corrective Rule (What will you do next time?)
                 </span>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                   Future Rule (Optional)
@@ -228,7 +251,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. Jab tak 15m candle close na ho tab tak order nahi place karunga."
+                placeholder="e.g. Will never enter until 15m candle closes and risk is capped at 2%."
                 value={lessonText}
                 onChange={e => setLessonText(e.target.value)}
                 style={{
@@ -252,7 +275,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
             }}>
               <ShieldAlert size={16} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
               <span>
-                <strong>Pro Trader Tip:</strong> Top 1% profitable traders kabhi apne loss ko ignore nahi karte, balki har loss ki galti likh kar apna edge improve karte hain.
+                <strong>Pro Trader Principle:</strong> Consistent traders never ignore losses. They review each mistake systematically to refine their edge.
               </span>
             </div>
 
@@ -279,7 +302,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
               {savedSuccess ? (
                 <>
                   <Check size={16} />
-                  <span>Galti Note Saved!</span>
+                  <span>Mistake Note Saved!</span>
                 </>
               ) : (
                 <>

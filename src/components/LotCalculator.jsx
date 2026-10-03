@@ -381,28 +381,28 @@ export default function LotCalculator({ accountCapital = 10000, currency = '$' }
               </div>
             </div>
 
-            {/* Direct Decision Verdict: "Kitne Rs ka trade lu?" */}
+            {/* Direct Decision Verdict: Position Sizing & Allocation */}
             <div style={{ marginTop: '14px', padding: '14px', background: 'rgba(20, 7, 15, 0.75)', border: '1px solid rgba(244, 114, 182, 0.3)', borderRadius: '12px', fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--accent-rose)', fontWeight: 700 }}>
                 <Sparkles size={16} />
-                <span>💡 Verdict: "Kitne Rupaye Ka Trade Lu? Pure {activeCurrency}10k Ka Ya 3k-4k Ka?"</span>
+                <span>💡 Verdict: Capital Allocation & Recommended Position Size</span>
               </div>
               <p style={{ margin: 0 }}>
                 {totalTradeValue >= capital ? (
                   <>
-                    Aapka Stop Loss sirf <strong>{slPercent.toFixed(1)}%</strong> dur hai. Strict <strong>{riskPercent}% ({formatCurrency(dollarRisk, activeCurrency)})</strong> risk rule ke hisab se aap <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong> ka trade le sakte hain. 
+                    Your Stop Loss is only <strong>{slPercent.toFixed(1)}%</strong> away. Based on your strict <strong>{riskPercent}% ({formatCurrency(dollarRisk, activeCurrency)})</strong> risk parameters, you can take a position size of up to <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong>. 
                     {leverage > 1 && (
                       <span style={{ display: 'block', marginTop: '6px', color: 'var(--accent-cyan)' }}>
-                        ⚡ <strong>{leverage}x Leverage</strong> ke saath aapke account se sirf <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> cash margin lagega, aur baaki <strong>{formatCurrency(remainingCash, activeCurrency)}</strong> capital safe rahega!
+                        ⚡ Using <strong>{leverage}x Leverage</strong>, only <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> cash margin is utilized, keeping your remaining <strong>{formatCurrency(remainingCash, activeCurrency)}</strong> capital safe!
                       </span>
                     )}
                   </>
                 ) : (
                   <>
-                    Aapko pure <strong>{formatCurrency(capital, activeCurrency)}</strong> ka trade <strong>NAHI</strong> lena chahiye! Sirf <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong> ka trade lein, taaki agar Stop Loss hit ho toh loss sirf <strong>{formatCurrency(dollarRisk, activeCurrency)} ({riskPercent}%)</strong> par hi ruk jaye.
+                    You should <strong>NOT</strong> allocate your entire <strong>{formatCurrency(capital, activeCurrency)}</strong> balance! Cap this position at <strong>{formatCurrency(totalTradeValue, activeCurrency)}</strong> so that if Stop Loss is triggered, your total loss is strictly limited to <strong>{formatCurrency(dollarRisk, activeCurrency)} ({riskPercent}%)</strong>.
                     {leverage > 1 && (
                       <span style={{ display: 'block', marginTop: '6px', color: 'var(--accent-cyan)' }}>
-                        ⚡ <strong>{leverage}x Leverage</strong> use karne par account se sirf <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> margin use hoga!
+                        ⚡ With <strong>{leverage}x Leverage</strong>, only <strong>{formatCurrency(marginRequired, activeCurrency)}</strong> margin is committed from your account balance!
                       </span>
                     )}
                   </>

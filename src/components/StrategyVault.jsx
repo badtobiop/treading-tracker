@@ -256,10 +256,10 @@ export default function StrategyVault({
                     </div>
                   </div>
 
-                  {/* Concept / "Is strategy me kya karunga" */}
+                  {/* Concept / Setup Conditions */}
                   <div style={{ marginTop: '14px', background: 'rgba(15, 20, 35, 0.65)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '10px', padding: '12px 14px' }}>
                     <span style={{ fontSize: '0.74rem', color: 'var(--accent-cyan)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                      💡 Strategy Concept & Method (Isme kya karna hai):
+                      💡 Strategy Concept & Execution Method:
                     </span>
                     <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
                       {strat.description || 'No description added yet. Click edit to define setup conditions.'}
@@ -395,14 +395,20 @@ export default function StrategyVault({
         </div>
       )}
 
-      {/* CREATE / EDIT STRATEGY MODAL (With data-lenis-prevent so it scrolls effortlessly!) */}
+      {/* CREATE / EDIT STRATEGY MODAL */}
       {isModalOpen && (
-        <div className="modal-overlay" data-lenis-prevent="true" onClick={() => setIsModalOpen(false)}>
+        <div 
+          className="modal-overlay" 
+          data-lenis-prevent="true" 
+          onClick={() => setIsModalOpen(false)}
+          onWheel={e => e.stopPropagation()}
+        >
           <div 
             className="modal-content" 
             data-lenis-prevent="true" 
             style={{ maxWidth: '640px' }}
             onClick={e => e.stopPropagation()}
+            onWheel={e => e.stopPropagation()}
           >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -459,11 +465,11 @@ export default function StrategyVault({
                 </div>
 
                 <div>
-                  <label className="form-label">Setup Concept & Method (Is Strategy Me Kya Karunga) *</label>
+                  <label className="form-label">Setup Concept & Method (Execution Strategy) *</label>
                   <textarea 
                     className="form-textarea" 
                     rows={3}
-                    placeholder="Describe how the setup works: e.g. 'Pehle 15-minute range mark karenge, breakout candle close hone ke baad retest par enter karenge...'"
+                    placeholder="Describe how the setup works: e.g. 'Mark 15-minute opening range, wait for confirmed breakout candle close, and enter on retest with 1:2 minimum RR...'"
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                     required
@@ -471,7 +477,7 @@ export default function StrategyVault({
                 </div>
 
                 <div>
-                  <label className="form-label">Mandatory Checklist Rules (Tune Saare Rule Follow Kiye Kya?)</label>
+                  <label className="form-label">Mandatory Checklist Rules (Pre-Trade Verification)</label>
                   <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
                     These rules will appear as an interactive checklist every time you log a trade with this strategy.
                   </span>

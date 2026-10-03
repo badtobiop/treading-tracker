@@ -325,11 +325,11 @@ function generateSmartLocalResponse(trades, question, conversationHistory = []) 
   }
 
   if (q.includes('kitne') || (q.includes('capital') && q.includes('risk')) || (q.includes('10k') && (q.includes('3k') || q.includes('4k') || q.includes('pure') || q.includes('leverage') || q.includes('lavrage')))) {
-    return "Direct Formula: Agar aapka capital ₹10,000 hai aur aap 2% (₹200) risk le rahe hain:\n\n• Tight SL (2% distance): Aap pure ₹10,000 ka trade le sakte hain (loss max ₹200).\n• Normal SL (4% distance): Pure 10k ka nahi, balki sirf ₹5,000 ka trade lena hai taaki loss ₹200 par hi ruke.\n• Wide SL (6-7% distance): Sirf ₹3,000 ka trade lena chahiye.\n• Leverage Ka Fayda: Agar aap 5x leverage use karte hain, toh ₹5,000 ke trade ke liye account se sirf ₹1,000 margin lagega aur baaki ₹9,000 capital safe rahega!";
+    return "Direct Formula: If your account capital is ₹10,000 ($10,000) and you risk 2% (₹200 / $200):\n\n• Tight Stop-Loss (2% distance): You can take up to the full ₹10,000 position size (max loss capped at ₹200).\n• Normal Stop-Loss (4% distance): Do not allocate the entire capital; allocate ₹5,000 so the loss is strictly capped at ₹200.\n• Wide Stop-Loss (6-7% distance): Allocate approximately ₹3,000.\n• Leverage Benefit: With 5x leverage, a ₹5,000 position size requires only ₹1,000 cash margin, keeping the remaining ₹9,000 capital protected!";
   }
 
   if (q.includes('rule') || q.includes('strategy') || q.includes('stratargy')) {
-    return "Disciplined Rule: Trade lene se pehle Strategy Vault me jaakar apne setup ke saare rules check karein (Candle close, SL strictly placed, 1:2 RR minimum). Agar ek bhi rule miss ho raha ho toh trade mat lijiye!";
+    return "Disciplined Execution Rule: Before taking any trade, verify all checklist rules in the Strategy Vault (candle close confirmation, strictly placed Stop Loss, and 1:2 minimum RR). If even a single condition is unmet, pass on the trade!";
   }
 
   if (q.includes('risk') || q.includes('capital') || q.includes('loss') || q.includes('sl') || q.includes('stop loss')) {

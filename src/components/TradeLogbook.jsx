@@ -17,7 +17,7 @@ import {
   Clock,
   AlertTriangle
 } from 'lucide-react';
-import { formatCurrency } from '../utils/calculations';
+import { formatCurrency, formatTradeTime } from '../utils/calculations';
 import MistakeNoteModal from './MistakeNoteModal';
 
 export default function TradeLogbook({ 
@@ -36,15 +36,13 @@ export default function TradeLogbook({
   const [customExitPrice, setCustomExitPrice] = useState('');
   const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
 
-  // Lock background scroll and pause Lenis when any modal is open
+  // Lock background scroll when any modal is open
   useEffect(() => {
     if (selectedTrade || tradeToClose || tradeToEditMistake) {
       const origOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      window.__lenis?.stop();
       return () => {
         document.body.style.overflow = origOverflow;
-        window.__lenis?.start();
       };
     }
   }, [selectedTrade, tradeToClose, tradeToEditMistake]);
@@ -297,10 +295,10 @@ export default function TradeLogbook({
 
                   return (
                     <tr key={trade.id}>
-                      {/* Date */}
+                      {/* Date & Time */}
                       <td>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{trade.date}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{trade.time || '--:--'}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{trade.time || formatTradeTime(trade)}</div>
                       </td>
 
                       {/* Asset */}
@@ -418,7 +416,7 @@ export default function TradeLogbook({
                                 gap: '3px',
                                 whiteSpace: 'nowrap'
                               }}
-                              title="Trade khatam ho gayi? TP ya SL record karein!"
+                              title="Position completed? Record TP or SL!"
                             >
                               ⚡ Settle / Close
                             </button>
@@ -430,7 +428,7 @@ export default function TradeLogbook({
                           </div>
                         )}
 
-                        {/* Mistake Note Tag / Galti Likho Button */}
+                        {/* Mistake Note Tag / Log Mistake Button */}
                         {trade.mistakeNote ? (
                           <div
                             onClick={(e) => {
@@ -452,7 +450,7 @@ export default function TradeLogbook({
                               maxWidth: '180px',
                               textAlign: 'left'
                             }}
-                            title={`Galti / Mistake: "${trade.mistakeNote}" (Click to view/edit)`}
+                            title={`Mistake Note: "${trade.mistakeNote}" (Click to view/edit)`}
                           >
                             <span style={{ flexShrink: 0 }}>⚠️</span>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -460,7 +458,7 @@ export default function TradeLogbook({
                             </span>
                           </div>
                         ) : (
-                          // ONLY show Galti Likho on SL_HIT or loss trades, NEVER on TP_HIT or OPEN trades!
+                          // ONLY show Log Mistake on SL_HIT or loss trades, NEVER on TP_HIT or OPEN trades!
                           (trade.outcome === 'SL_HIT' || Number(trade.pnl) < 0) && trade.outcome !== 'OPEN' && trade.outcome !== 'TP_HIT' && (
                             <div>
                               <button
@@ -484,9 +482,9 @@ export default function TradeLogbook({
                                   gap: '3px',
                                   whiteSpace: 'nowrap'
                                 }}
-                                title="Click karein aur likhein ki is trade me kya galti hui jisse SL hit hua"
+                                title="Click to log trade mistake and reason for Stop-Loss trigger"
                               >
-                                <span>⚠️</span> + Galti Likho
+                                <span>⚠️</span> + Log Mistake
                               </button>
                             </div>
                           )
@@ -517,7 +515,7 @@ export default function TradeLogbook({
                                 background: trade.mistakeNote ? 'rgba(244, 63, 94, 0.18)' : 'rgba(244, 63, 94, 0.08)'
                               }}
                               onClick={() => setTradeToEditMistake(trade)}
-                              title={trade.mistakeNote ? "Edit Mistake / Post-Mortem Note" : "SL kyu hit hua? Galti note karein"}
+                              title={trade.mistakeNote ? "Edit Mistake / Post-Mortem Note" : "Log Trade Mistake / Post-Mortem"}
                             >
                               <AlertTriangle size={14} />
                             </button>
@@ -555,8 +553,18 @@ export default function TradeLogbook({
 
       {/* Trade Detail Modal */}
       {selectedTrade && (
-        <div className="modal-overlay" data-lenis-prevent="true" onClick={() => setSelectedTrade(null)}>
-          <div className="modal-content" data-lenis-prevent="true" onClick={e => e.stopPropagation()}>
+        <div 
+          className="modal-overlay" 
+          data-lenis-prevent="true" 
+          onClick={() => setSelectedTrade(null)}
+          onWheel={e => e.stopPropagation()}
+        >
+          <div 
+            className="modal-content" 
+            data-lenis-prevent="true" 
+            onClick={e => e.stopPropagation()}
+            onWheel={e => e.stopPropagation()}
+          >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span className="asset-badge" style={{ fontSize: '1.2rem' }}>{selectedTrade.asset}</span>
@@ -564,7 +572,7 @@ export default function TradeLogbook({
                   {selectedTrade.type}
                 </span>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {selectedTrade.date} at {selectedTrade.time || '12:00'}
+                  {selectedTrade.date} at {selectedTrade.time || formatTradeTime(selectedTrade)}
                 </span>
               </div>
               <button className="btn-icon" onClick={() => setSelectedTrade(null)}>
@@ -572,7 +580,12 @@ export default function TradeLogbook({
               </button>
             </div>
 
-            <div className="modal-body" data-lenis-prevent="true" style={{ overflowY: 'auto', maxHeight: 'calc(85vh - 120px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+            <div 
+              className="modal-body" 
+              data-lenis-prevent="true" 
+              onWheel={e => e.stopPropagation()}
+              style={{ overflowY: 'auto' }}
+            >
               {/* If Open Trade: Show Quick Settle Panel right at top of detail modal */}
               {selectedTrade.outcome === 'OPEN' && (
                 <div style={{ background: 'linear-gradient(135deg, rgba(20, 25, 45, 0.95), rgba(15, 23, 42, 0.95))', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '12px', padding: '16px', marginBottom: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
@@ -580,8 +593,8 @@ export default function TradeLogbook({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '1.2rem' }}>⚡</span>
                       <div>
-                        <strong style={{ fontSize: '0.92rem', color: '#fff' }}>Ye Position Market Me OPEN Hai</strong>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Market me trade khatam ho gayi? Niche se 1-click me result record karein:</div>
+                        <strong style={{ fontSize: '0.92rem', color: '#fff' }}>This Position is Active / OPEN</strong>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Did this trade conclude in the market? Settle outcome in 1-click:</div>
                       </div>
                     </div>
                     <span style={{ fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
@@ -609,7 +622,7 @@ export default function TradeLogbook({
                       }}
                     >
                       <span style={{ fontSize: '1.3rem' }}>🎯</span>
-                      <strong style={{ fontSize: '0.86rem', color: 'var(--profit)' }}>TP Hit Hua!</strong>
+                      <strong style={{ fontSize: '0.86rem', color: 'var(--profit)' }}>Take Profit Hit!</strong>
                       <span style={{ fontSize: '0.72rem', color: 'var(--profit)', fontWeight: 700 }}>
                         Target: {selectedTrade.takeProfit || 'TP'}
                       </span>
@@ -633,7 +646,7 @@ export default function TradeLogbook({
                       }}
                     >
                       <span style={{ fontSize: '1.3rem' }}>🛑</span>
-                      <strong style={{ fontSize: '0.86rem', color: 'var(--loss)' }}>SL Hit Hua!</strong>
+                      <strong style={{ fontSize: '0.86rem', color: 'var(--loss)' }}>Stop Loss Hit!</strong>
                       <span style={{ fontSize: '0.72rem', color: 'var(--loss)', fontWeight: 700 }}>
                         Stop Loss: {selectedTrade.stopLoss || 'SL'}
                       </span>
@@ -659,7 +672,7 @@ export default function TradeLogbook({
                       <span style={{ fontSize: '1.3rem' }}>⚖️</span>
                       <strong style={{ fontSize: '0.86rem', color: 'var(--text-secondary)' }}>Breakeven</strong>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        Exit: {selectedTrade.entryPrice} (₹0)
+                        Exit: {selectedTrade.entryPrice} ({currency}0)
                       </span>
                     </button>
                   </div>
@@ -670,7 +683,7 @@ export default function TradeLogbook({
                       type="number" 
                       step="any"
                       className="form-input"
-                      placeholder="Ya custom exit price daalein (e.g. 4190)"
+                      placeholder="Or enter custom exit price (e.g. 4190)"
                       value={customExitPrice}
                       onChange={e => setCustomExitPrice(e.target.value)}
                       style={{ padding: '7px 12px', fontSize: '0.84rem', flex: 1 }}
@@ -681,7 +694,7 @@ export default function TradeLogbook({
                       style={{ padding: '7px 14px', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600 }}
                       onClick={() => {
                         if (!customExitPrice) {
-                          alert('Kripya exit price daalein!');
+                          alert('Please enter an exit price!');
                           return;
                         }
                         handleSettleTrade(selectedTrade, 'CUSTOM', customExitPrice);
@@ -770,14 +783,14 @@ export default function TradeLogbook({
                 (Number(selectedTrade.pnl) < 0 || selectedTrade.outcome === 'SL_HIT') && selectedTrade.outcome !== 'OPEN' && selectedTrade.outcome !== 'TP_HIT' && (
                   <div className="card" style={{ padding: '12px 14px', border: '1px dashed rgba(244, 63, 94, 0.35)', background: 'rgba(244, 63, 94, 0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      🛑 <strong>SL Hit Hua Tha:</strong> Apni galti note karein taaki future me repeat na ho.
+                      🛑 <strong>Stop-Loss Triggered:</strong> Record your mistake to prevent repeating it.
                     </div>
                     <button 
                       className="btn btn-secondary" 
                       style={{ fontSize: '0.76rem', padding: '4px 10px', color: '#fda4af', borderColor: 'rgba(244, 63, 94, 0.4)' }}
                       onClick={() => setTradeToEditMistake(selectedTrade)}
                     >
-                      ⚠️ + Galti Likho
+                      ⚠️ + Log Mistake
                     </button>
                   </div>
                 )
@@ -804,8 +817,19 @@ export default function TradeLogbook({
 
       {/* Settle Open Trade Quick Modal */}
       {tradeToClose && (
-        <div className="modal-overlay" data-lenis-prevent="true" onClick={() => setTradeToClose(null)}>
-          <div className="modal-content" data-lenis-prevent="true" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+        <div 
+          className="modal-overlay" 
+          data-lenis-prevent="true" 
+          onClick={() => setTradeToClose(null)}
+          onWheel={e => e.stopPropagation()}
+        >
+          <div 
+            className="modal-content" 
+            data-lenis-prevent="true" 
+            onClick={e => e.stopPropagation()} 
+            onWheel={e => e.stopPropagation()}
+            style={{ maxWidth: '520px' }}
+          >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span className="asset-badge" style={{ fontSize: '1.1rem' }}>{tradeToClose.asset}</span>
@@ -822,9 +846,14 @@ export default function TradeLogbook({
               <button className="btn-icon" onClick={() => setTradeToClose(null)}>✕</button>
             </div>
 
-            <div className="modal-body" data-lenis-prevent="true" style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', maxHeight: 'calc(85vh - 120px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+            <div 
+              className="modal-body" 
+              data-lenis-prevent="true" 
+              onWheel={e => e.stopPropagation()}
+              style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}
+            >
               <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
-                Ye trade market me complete ho gayi? Niche diye gaye option me se chunein ki <strong>TP Hit hua ya SL Hit</strong>:
+                Did this trade conclude in the market? Select whether <strong>Target (TP) was hit or Stop Loss (SL) triggered</strong>:
               </p>
 
               {/* 3 Outcome Buttons */}
@@ -849,7 +878,7 @@ export default function TradeLogbook({
                     <span style={{ fontSize: '1.8rem' }}>🎯</span>
                     <div>
                       <strong style={{ fontSize: '0.98rem', color: 'var(--profit)', display: 'block' }}>
-                        TP Hit Hua! (Target Achieved)
+                        Take Profit (TP) Hit!
                       </strong>
                       <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                         Take Profit Price: <strong>{tradeToClose.takeProfit || 'TP'}</strong>
@@ -887,7 +916,7 @@ export default function TradeLogbook({
                     <span style={{ fontSize: '1.8rem' }}>🛑</span>
                     <div>
                       <strong style={{ fontSize: '0.98rem', color: 'var(--loss)', display: 'block' }}>
-                        SL Hit Hua! (Stop Loss Triggered)
+                        Stop Loss (SL) Hit!
                       </strong>
                       <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                         Stop Loss Price: <strong>{tradeToClose.stopLoss || 'SL'}</strong>
@@ -941,7 +970,7 @@ export default function TradeLogbook({
               {/* 4. Custom Exit Price */}
               <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '10px', padding: '12px' }}>
                 <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-                  Ya koi aur exit price par close kiya?
+                  Or closed at a custom exit price?
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input 
@@ -959,7 +988,7 @@ export default function TradeLogbook({
                     style={{ padding: '7px 16px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
                     onClick={() => {
                       if (!customExitPrice) {
-                        alert('Kripya exit price daalein!');
+                        alert('Please enter an exit price!');
                         return;
                       }
                       handleSettleTrade(tradeToClose, 'CUSTOM', customExitPrice);

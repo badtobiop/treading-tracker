@@ -168,7 +168,7 @@ export default function LogTradeModal({
   // Set TP directly using desired Risk:Reward ratio (1.5, 2.0, 3.0)
   const handleSetRR = (ratio) => {
     if (entryNum <= 0 || slNum <= 0) {
-      alert('Pehle Buy/Entry Price aur Stop Loss (SL) daalein, taaki exact Target (TP) calculate ho sake!');
+      alert('Please enter Entry Price and Stop Loss (SL) first to calculate the exact Target (TP)!');
       return;
     }
     const risk = Math.abs(entryNum - slNum);
@@ -196,7 +196,7 @@ export default function LogTradeModal({
   // Auto-apply calculated position size into form
   const handleApplyPositionSize = () => {
     if (exactUnitsNeeded <= 0) {
-      alert('Pehle Entry Price aur Stop Loss (SL) daalein!');
+      alert('Please enter Entry Price and Stop Loss (SL) first!');
       return;
     }
     const appliedQty = parseFloat(exactUnitsNeeded.toFixed(2));
@@ -345,7 +345,7 @@ export default function LogTradeModal({
     const finalTrade = {
       id: `tr-${Date.now()}`,
       date: tradeData.date || today,
-      time: tradeData.time || currentTime,
+      time: tradeData.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
       asset: finalAsset || 'NIFTY50',
       type: tradeData.type || 'BUY',
       entryPrice: parseFloat(tradeData.entryPrice) || 0,
@@ -381,11 +381,17 @@ export default function LogTradeModal({
   const isAllRulesFollowed = totalRules > 0 && checkedRulesCount === totalRules;
 
   return (
-    <div className="modal-overlay" data-lenis-prevent="true" onClick={onClose}>
+    <div 
+      className="modal-overlay" 
+      data-lenis-prevent="true" 
+      onClick={onClose}
+      onWheel={e => e.stopPropagation()}
+    >
       <div 
         className="modal-content" 
         data-lenis-prevent="true" 
         onClick={e => e.stopPropagation()}
+        onWheel={e => e.stopPropagation()}
         style={{ maxWidth: '740px' }}
       >
         {/* Header */}
@@ -423,7 +429,11 @@ export default function LogTradeModal({
           </div>
         </div>
 
-        <div className="modal-body" data-lenis-prevent="true">
+        <div 
+          className="modal-body" 
+          data-lenis-prevent="true"
+          onWheel={e => e.stopPropagation()}
+        >
           
           {/* TAB 1: EASY TRADE ENTRY (DEFAULT) */}
           {activeTab === 'manual' && (
@@ -702,14 +712,14 @@ export default function LogTradeModal({
                         className="btn btn-primary"
                         style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, justifyContent: 'center' }}
                         onClick={handleApplyPositionSize}
-                        title="Form me automatic trade size fill karein"
+                        title="Auto-fill recommended position size into form"
                       >
-                        ⚡ 1-Click Auto-Fill (Ye Trade Size Form Me Daalo)
+                        ⚡ 1-Click Auto-Fill (Apply Recommended Size)
                       </button>
                     </div>
                   ) : (
                     <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.76rem', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      💡 Upar <strong>Buy / Entry Price</strong> aur <strong>Stop Loss (SL)</strong> daalein — yeh calculator automatic bata dega ki 10k me se kitne rupaye (aur USD) ka trade lena hai taaki SL pe sirf ₹{targetRiskRupees} ka loss ho.
+                      💡 Enter <strong>Entry Price</strong> and <strong>Stop Loss (SL)</strong> above — this calculator will automatically determine the recommended position size so your loss is strictly capped at {currency}{targetRiskRupees}.
                     </div>
                   )}
                 </div>
@@ -727,12 +737,12 @@ export default function LogTradeModal({
                         </span>
                       )}
                     </div>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', margin: '2px 0 4px' }}>Kitne rupaye / dollar ka trade liya</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', margin: '2px 0 4px' }}>Total trade size / capital committed</span>
                     <input 
                       type="number" 
                       step="any"
                       className="form-input" 
-                      placeholder={currency === '₹' ? 'e.g. 1000 ya 10000' : 'e.g. 10 or 100'}
+                      placeholder={currency === '₹' ? 'e.g. 1000 or 10000' : 'e.g. 10 or 100'}
                       value={formData.tradeAmount}
                       onChange={e => handleInputChange('tradeAmount', e.target.value)}
                     />
@@ -820,12 +830,12 @@ export default function LogTradeModal({
                 </div>
               </div>
 
-              {/* SECTION 4: TRADE OUTCOME SELECTOR ("Mera TP Hit Hua Ya SL?") */}
+              {/* SECTION 4: TRADE OUTCOME SELECTOR */}
               <div style={{ background: 'rgba(20, 25, 45, 0.7)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '14px', padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Target size={16} style={{ color: 'var(--accent-cyan)' }} />
-                    Is Trade Ka Result Kya Hua? (Click one to auto-record):
+                    Trade Outcome & Settlement (Click one to auto-record):
                   </span>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Auto-fills Net P&L</span>
                 </div>
@@ -981,7 +991,7 @@ export default function LogTradeModal({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <CheckSquare size={15} style={{ color: isAllRulesFollowed ? 'var(--profit)' : 'var(--accent-rose)' }} />
-                      Checklist: Tune Saare Rule Follow Kiye Kya?
+                      Execution Checklist: Strategy Rule Verification
                     </span>
                     <span 
                       style={{ 
@@ -1030,7 +1040,7 @@ export default function LogTradeModal({
                 </div>
               </div>
 
-              {/* SECTION 6: NOTES & DATE */}
+              {/* SECTION 6: NOTES, DATE & TIME */}
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label">Execution Date</label>
@@ -1043,9 +1053,19 @@ export default function LogTradeModal({
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label">Execution Time (Trade Entry Time)</label>
+                  <input 
+                    type="time" 
+                    className="form-input" 
+                    value={formData.time}
+                    onChange={e => handleInputChange('time', e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
                   <label className="form-label">Discipline State</label>
                   <select 
-                    className="form-select"
+                    className="form-select" 
                     value={formData.emotion}
                     onChange={e => handleInputChange('emotion', e.target.value)}
                   >
@@ -1079,7 +1099,7 @@ export default function LogTradeModal({
                   }}>
                     <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fda4af', fontWeight: 700 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>⚠️</span> Trade Post-Mortem: SL kyu hit hua? (Galti Likhein)
+                        <span>⚠️</span> Trade Post-Mortem: Root Cause & Mistake Analysis
                       </span>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Self-Review</span>
                     </label>
@@ -1118,7 +1138,7 @@ export default function LogTradeModal({
                     <textarea
                       className="form-textarea"
                       rows={2}
-                      placeholder="e.g. Maine jaldbazi me bina candle close huye entry le li aur risk limit se zyada lot size tha..."
+                      placeholder="e.g. Entered prematurely before 15m candle close, exceeded maximum allowed lot size, and held past invalidation level..."
                       value={formData.mistakeNote || ''}
                       onChange={e => handleInputChange('mistakeNote', e.target.value)}
                       style={{

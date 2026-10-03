@@ -299,3 +299,29 @@ export function formatCurrency(amount, currency = '$') {
   });
   return `${sign}${currency}${absFormatted}`;
 }
+
+/**
+ * Format trade execution time reliably from trade.time, trade.created_at, or trade.id timestamp
+ */
+export function formatTradeTime(trade) {
+  if (!trade) return '--:--';
+  if (trade.time && trade.time !== '--:--' && String(trade.time).trim() !== '') {
+    return trade.time;
+  }
+  if (trade.created_at) {
+    try {
+      const d = new Date(trade.created_at);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      }
+    } catch (e) {}
+  }
+  if (trade.id && String(trade.id).startsWith('tr-')) {
+    const ts = parseInt(trade.id.replace('tr-', ''), 10);
+    if (!isNaN(ts) && ts > 1000000000000) {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+  }
+  return '--:--';
+}
+

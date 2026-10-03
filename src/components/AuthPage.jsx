@@ -172,7 +172,7 @@ export default function AuthPage({ onLoginSuccess }) {
       onError: (err) => {
         console.warn('Google sign-in popup error:', err);
         setErrorMessage(
-          'Google popup block ya origin restriction ki wajah se close hua. Niche diye gaye 1-Click button se turant enter karein!'
+          'Google popup was closed or blocked by browser origin restrictions. Use the 1-Click Instant Access button below to sign in immediately.'
         );
       }
     });

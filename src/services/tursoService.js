@@ -186,8 +186,9 @@ export async function fetchUserTradesFromTurso(user) {
       let rawNotes = String(row.notes || '');
       let parsedMistake = '';
       let parsedLesson = '';
-      if (rawNotes.includes('[GALTI / MISTAKE]:')) {
-        const parts = rawNotes.split('[GALTI / MISTAKE]:');
+      if (rawNotes.includes('[MISTAKE NOTE]:') || rawNotes.includes('[GALTI / MISTAKE]:')) {
+        const tag = rawNotes.includes('[MISTAKE NOTE]:') ? '[MISTAKE NOTE]:' : '[GALTI / MISTAKE]:';
+        const parts = rawNotes.split(tag);
         rawNotes = parts[0].trim();
         const subParts = (parts[1] || '').split('[LESSON]:');
         parsedMistake = (subParts[0] || '').trim();
@@ -248,10 +249,10 @@ export async function insertUserTradeToTurso(trade, user) {
 
   try {
     let serializedNotes = trade.notes || '';
-    if (trade.mistakeNote && !serializedNotes.includes('[GALTI / MISTAKE]:')) {
+    if (trade.mistakeNote && !serializedNotes.includes('[MISTAKE NOTE]:') && !serializedNotes.includes('[GALTI / MISTAKE]:')) {
       serializedNotes = serializedNotes 
-        ? `${serializedNotes}\n\n[GALTI / MISTAKE]: ${trade.mistakeNote}` 
-        : `[GALTI / MISTAKE]: ${trade.mistakeNote}`;
+        ? `${serializedNotes}\n\n[MISTAKE NOTE]: ${trade.mistakeNote}` 
+        : `[MISTAKE NOTE]: ${trade.mistakeNote}`;
     }
     if (trade.lessonLearned && !serializedNotes.includes('[LESSON]:')) {
       serializedNotes = `${serializedNotes}\n[LESSON]: ${trade.lessonLearned}`;

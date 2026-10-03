@@ -100,15 +100,14 @@ export default function App() {
       wheelMultiplier: 1.1,
       touchMultiplier: 1.5,
       prevent: (node) => {
+        // If any modal overlay is in DOM, allow all native wheel/scroll events immediately
+        if (typeof document !== 'undefined' && document.querySelector('.modal-overlay')) {
+          return true;
+        }
+        if (!node) return false;
         // Leave scroll events completely untouched for modals, dropdowns, and overlays
-        return (
-          node.classList?.contains('modal-overlay') ||
-          node.classList?.contains('modal-content') ||
-          node.classList?.contains('modal-body') ||
-          node.closest?.('.modal-overlay') ||
-          node.closest?.('.modal-content') ||
-          node.closest?.('.modal-body') ||
-          node.closest?.('[data-lenis-prevent]') ||
+        return Boolean(
+          node.closest?.('.modal-overlay, .modal-content, .modal-body, [data-lenis-prevent], .ai-drawer-scrollable') ||
           node.hasAttribute?.('data-lenis-prevent')
         );
       }

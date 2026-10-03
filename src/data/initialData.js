@@ -30,57 +30,57 @@ export const DEFAULT_STRATEGIES_PLAYBOOK = [
   {
     id: 'strat-1',
     name: '15m Range Breakout',
-    description: 'Pehle 15-minute range (High & Low) mark karo, breakout candle close hone par retest par entry lo.',
+    description: 'Mark the initial 15-minute range (High & Low). Wait for a decisive breakout candle close, then enter on retest.',
     timeframe: '15m',
     preferredAsset: 'NIFTY50 / BANKNIFTY / STOCKS',
     rules: [
-      '15-minute opening candle range break hone tak wait karo',
-      'Candle close hone ke baad hi entry leni hai (no running candle entry)',
-      'Stop Loss breakout candle ke low/high ya VWAP ke peeche hona chahiye',
-      'Account capital ka maximum 1% to 2% hi risk karna hai',
-      'Target minimum 1:2 Risk-to-Reward ratio hona chahiye'
+      'Wait for the opening 15-minute candle range to be clearly established',
+      'Enter only after candle close confirmation (no running candle entries)',
+      'Stop Loss must be placed strictly behind breakout candle or VWAP',
+      'Risk maximum 1% to 2% of total account capital',
+      'Target minimum 1:2 Risk-to-Reward ratio'
     ]
   },
   {
     id: 'strat-2',
     name: 'ICT Order Block',
-    description: 'Liquidity sweep ke baad Market Structure Shift (MSS) hone par Order Block ya FVG ke retest par entry.',
+    description: 'Identify liquidity sweeps followed by Market Structure Shift (MSS). Enter on retest of Order Block or Fair Value Gap (FVG).',
     timeframe: '5m / 15m',
     preferredAsset: 'XAUUSD / FOREX / CRYPTO',
     rules: [
-      'Previous Day High/Low ya session liquidity sweep confirm karo',
-      'Displacement ke saath Market Structure Shift (MSS) hona zaroori hai',
-      '50% Order Block ya Fair Value Gap (FVG) retest par entry lo',
-      'Stop loss invalidation level ke bahar strictly rakhein',
-      'Target 1:2 ya 1:3 RR hona chahiye'
+      'Confirm Previous Day High/Low or key session liquidity sweep',
+      'Wait for Market Structure Shift (MSS) with displacement',
+      'Enter at 50% equilibrium of Order Block or Fair Value Gap (FVG) retest',
+      'Place Stop Loss strictly outside invalidation level',
+      'Target minimum 1:2 or 1:3 Risk-to-Reward ratio'
     ]
   },
   {
     id: 'strat-3',
     name: 'EMA Trend Following',
-    description: 'Higher timeframe trend ke direction me 20/50 EMA pullback par high-probability continuation trade.',
+    description: 'High-probability continuation entries on 20/50 EMA pullbacks aligned with higher timeframe trend momentum.',
     timeframe: '15m / 1H',
     preferredAsset: 'EQUITY CASH / INDEX',
     rules: [
-      'Price 200 EMA ke upar hona chahiye (Long ke liye) ya niche (Short ke liye)',
-      'Price ka 20 ya 50 EMA par pullback aur rejection candle aane ka wait karo',
-      'Confirmation candle close hone par hi entry lena hai',
-      'Stop loss pullback swing low ke niche rakhein',
-      'Emotional revenge trade bilkul nahi karna'
+      'Price must be above 200 EMA for Longs or below 200 EMA for Shorts',
+      'Wait for price pullback to 20 or 50 EMA with rejection candle',
+      'Enter strictly on confirmed confirmation candle close',
+      'Place Stop Loss below the pullback swing low',
+      'Strictly avoid emotional revenge trading'
     ]
   },
   {
     id: 'strat-4',
     name: 'Support & Resistance Reversal',
-    description: 'Daily/Hourly key S&R levels par rejection candle aur RSI divergence ke saath reversal capture karna.',
+    description: 'Capture reversals at major daily/hourly key S&R levels with rejection candle confirmation and RSI divergence.',
     timeframe: '1H / 15m',
     preferredAsset: 'ALL',
     rules: [
-      'Level kam se kam 2 baar pehle test ho chuka ho',
-      'Pin bar ya Engulfing candle rejection confirm karo',
-      'RSI divergence ya volume exhaustion check karo',
-      'Stop loss wick ke 5-10 points bahar rakho',
-      'Capital ka 2% se zyada risk na ho'
+      'Key level must be tested at least twice previously',
+      'Confirm rejection via pin bar or engulfing candle structure',
+      'Verify RSI divergence or volume exhaustion',
+      'Set Stop Loss 5-10 points beyond candle wick',
+      'Risk capped strictly at 2% of account capital'
     ]
   }
 ];

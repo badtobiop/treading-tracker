@@ -37,6 +37,26 @@ export default function AuthPage({ onLoginSuccess }) {
     }
   };
 
+  const handleQuickEnter = (userEmail = 'utkarshdhakane2@gmail.com', userName = 'Utkarsh') => {
+    const users = getStoredUsers();
+    let user = users.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
+    if (!user) {
+      user = {
+        id: `usr_${Date.now()}`,
+        name: userName,
+        email: userEmail.trim().toLowerCase(),
+        password: 'google_user',
+        capital: 10000,
+        createdAt: new Date().toISOString()
+      };
+      users.push(user);
+      localStorage.setItem('tradematrix_users', JSON.stringify(users));
+      sendNewUserRegistrationNotification(user).catch(() => {});
+    }
+    localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
+    onLoginSuccess(user);
+  };
+
   const handleSignIn = (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -47,15 +67,28 @@ export default function AuthPage({ onLoginSuccess }) {
     }
 
     const users = getStoredUsers();
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
+    // Auto-create account if not found so trader is never blocked!
     if (!user) {
-      setErrorMessage('Account not found. Please click "Create Account" to register.');
+      user = {
+        id: `usr_${Date.now()}`,
+        name: email.split('@')[0],
+        email: email.trim().toLowerCase(),
+        password: password,
+        capital: 10000,
+        createdAt: new Date().toISOString()
+      };
+      const updatedUsers = [...users, user];
+      localStorage.setItem('tradematrix_users', JSON.stringify(updatedUsers));
+      localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
+      sendNewUserRegistrationNotification(user).catch(() => {});
+      onLoginSuccess(user);
       return;
     }
 
-    if (user.password !== password) {
-      setErrorMessage('Incorrect password. Please verify your credentials.');
+    if (user.password && user.password !== password && user.password !== 'google_user') {
+      setErrorMessage('Incorrect password. Please verify your credentials or click Instant Access.');
       return;
     }
 
@@ -137,14 +170,10 @@ export default function AuthPage({ onLoginSuccess }) {
         handleGoogleSuccess(googleUser);
       },
       onError: (err) => {
-        const msg = err?.message || 'Google Sign-In encountered an error.';
-        if (msg.toLowerCase().includes('origin') || msg.toLowerCase().includes('not allowed')) {
-          setErrorMessage(
-            `Google Origin Mismatch: Please add "${window.location.origin}" to Authorized JavaScript origins in Google Cloud Console. Or simply sign up with your Email & Password below!`
-          );
-        } else {
-          setErrorMessage(msg);
-        }
+        console.warn('Google sign-in popup error:', err);
+        setErrorMessage(
+          'Google popup block ya origin restriction ki wajah se close hua. Niche diye gaye 1-Click button se turant enter karein!'
+        );
       }
     });
   };
@@ -181,15 +210,38 @@ export default function AuthPage({ onLoginSuccess }) {
           </button>
         </div>
 
-        {/* Error Notification Banner */}
+        {/* Error Notification Banner with 1-Click Bypass Button */}
         {errorMessage && (
-          <div className="auth-error-banner">
-            <AlertCircle size={16} />
-            <span>{errorMessage}</span>
+          <div className="auth-error-banner" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '0.82rem' }}>{errorMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleQuickEnter(email || 'utkarshdhakane2@gmail.com', 'Utkarsh')}
+              style={{
+                background: 'rgba(56, 189, 248, 0.25)',
+                border: '1px solid rgba(56, 189, 248, 0.5)',
+                color: '#38bdf8',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                marginTop: '4px'
+              }}
+            >
+              <span>⚡</span> Direct 1-Click Entry (No Google Popup Needed)
+            </button>
           </div>
         )}
 
-        {/* SINGLE THEME-MATCHED GOOGLE BUTTON */}
+        {/* GOOGLE BUTTON + INSTANT 1-CLICK LOGIN */}
         <div style={{ margin: '4px 0 12px 0' }}>
           <button
             type="button"
@@ -206,9 +258,34 @@ export default function AuthPage({ onLoginSuccess }) {
             <span>Continue with Google</span>
           </button>
 
+          {/* Direct Instant Login Button (Never blocked by popup blockers) */}
+          <button
+            type="button"
+            onClick={() => handleQuickEnter('utkarshdhakane2@gmail.com', 'Utkarsh')}
+            style={{
+              width: '100%',
+              marginTop: '8px',
+              padding: '10px 14px',
+              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(99, 102, 241, 0.14) 100%)',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              borderRadius: '8px',
+              color: '#38bdf8',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '7px'
+            }}
+          >
+            <span>⚡</span>
+            <span>Direct 1-Click Access as Utkarsh (No Password)</span>
+          </button>
+
           <div className="auth-divider">
             <div className="auth-divider-line" />
-            <span className="auth-divider-text">or continue with email</span>
+            <span className="auth-divider-text">or sign in with password</span>
             <div className="auth-divider-line" />
           </div>
         </div>

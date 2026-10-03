@@ -312,6 +312,8 @@ export default function App() {
                   trades={trades}
                   onResetTrades={handleResetTrades}
                   onImportTrades={handleImportTrades}
+                  currentUser={currentUser}
+                  accountCapital={metrics.currentCapital}
                 />
               )}
             </main>

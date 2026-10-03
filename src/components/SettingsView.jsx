@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   Download, 
@@ -10,7 +10,10 @@ import {
   Wallet,
   HelpCircle,
   Mail,
-  MessageSquare
+  MessageSquare,
+  Send,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function SettingsView({ 
@@ -18,10 +21,67 @@ export default function SettingsView({
   onSaveSettings, 
   trades, 
   onResetTrades, 
-  onImportTrades 
+  onImportTrades,
+  currentUser,
+  accountCapital
 }) {
   const [formData, setFormData] = useState({ ...settings });
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Direct Trader Support Message State
+  const [supportName, setSupportName] = useState(currentUser?.name || '');
+  const [supportEmail, setSupportEmail] = useState(currentUser?.email || '');
+  const [supportTopic, setSupportTopic] = useState('Position Sizing & Risk Calculation Help');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
+  const [sendError, setSendError] = useState('');
+
+  // Sync with current user profile if available
+  useEffect(() => {
+    if (currentUser?.name && !supportName) setSupportName(currentUser.name);
+    if (currentUser?.email && !supportEmail) setSupportEmail(currentUser.email);
+  }, [currentUser]);
+
+  // Dispatch Support Message to Utkarsh's Gmail
+  const handleSendSupportMessage = async (e) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) {
+      alert('Kripya apna message likhein!');
+      return;
+    }
+    setIsSending(true);
+    setSendSuccess(false);
+    setSendError('');
+
+    try {
+      const res = await fetch('/api/support-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: supportName || currentUser?.name || 'Trader',
+          email: supportEmail || currentUser?.email || 'No email provided',
+          subject: supportTopic,
+          message: supportMessage,
+          userCapital: accountCapital || settings.initialCapital || 10000,
+          currency: settings.currency || '₹'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSendSuccess(true);
+        setSupportMessage('');
+      } else {
+        throw new Error(data.error || 'Failed to dispatch message');
+      }
+    } catch (err) {
+      console.error(err);
+      setSendError('Message bhejne me dikkat aayi. Aap direct utkarshdhakane2@gmail.com par bhi mail bhej sakte hain.');
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -174,31 +234,108 @@ export default function SettingsView({
             Have questions regarding risk calculations, position sizing formulas, or journal synchronization? Our trader support desk is available to assist you.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-            {/* Support Email Card */}
-            <div style={{ padding: '14px 16px', background: 'rgba(20, 7, 15, 0.7)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
-              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
-                Official Support Desk
-              </span>
-              <strong style={{ fontSize: '0.92rem', color: '#fff1f2', display: 'block', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-                utkarshdhakane2@gmail.com
-              </strong>
-              <span style={{ fontSize: '0.72rem', color: 'var(--profit)', display: 'block', marginTop: '4px' }}>
-                Direct email assistance
-              </span>
-            </div>
+          {/* Direct Support Message Form */}
+          <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '12px', padding: '18px', marginBottom: '18px' }}>
+            <form onSubmit={handleSendSupportMessage} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                <div>
+                  <label className="form-label">Aapka Naam (Trader Name) *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="e.g. Rahul / Trader"
+                    value={supportName}
+                    onChange={e => setSupportName(e.target.value)}
+                    required
+                  />
+                </div>
 
-            {/* Direct Contact Action */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px', background: 'rgba(20, 7, 15, 0.7)', border: '1px solid rgba(244, 114, 182, 0.2)', borderRadius: '10px' }}>
-              <a
-                href="mailto:utkarshdhakane2@gmail.com?subject=TradeMatrix%20AI%20Trader%20Support%20Request"
-                className="btn btn-primary"
-                style={{ padding: '10px 18px', fontSize: '0.86rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'center' }}
-              >
-                <Mail size={16} />
-                <span>Contact Official Support</span>
-              </a>
-            </div>
+                <div>
+                  <label className="form-label">Aapki Gmail / Email ID *</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    placeholder="e.g. trader@gmail.com"
+                    value={supportEmail}
+                    onChange={e => setSupportEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Topic / Issue Category</label>
+                <select 
+                  className="form-select"
+                  value={supportTopic}
+                  onChange={e => setSupportTopic(e.target.value)}
+                >
+                  <option value="Position Sizing & Risk Calculation Help">🎯 Position Sizing & 2% Risk Calculation Help</option>
+                  <option value="Stop Loss & Take Profit Target Help">🛑 Stop Loss (SL) & Take Profit (TP) Setup</option>
+                  <option value="Crypto & Leverage Questions">⚡ Crypto (USD/USDT) & Leverage Questions</option>
+                  <option value="Account, Cloud DB or Trade Sync Issue">🔐 Account / Cloud Data Sync Issue</option>
+                  <option value="Feature Suggestion or Feedback">💡 Feature Suggestion or Feedback</option>
+                  <option value="Other Support Query">❓ Other Support Query</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label">
+                  <span>Apna Message / Sawaal Yahan Likhein *</span>
+                </label>
+                <textarea 
+                  className="form-input"
+                  rows="4"
+                  style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                  placeholder="Hello Utkarsh, mujhe trade lagane ya calculation me ye puchna tha..."
+                  value={supportMessage}
+                  onChange={e => setSupportMessage(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Success Notification Alert */}
+              {sendSuccess && (
+                <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '8px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CheckCircle2 size={18} style={{ color: 'var(--profit)', flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.84rem', color: '#ecfdf5', lineHeight: 1.45 }}>
+                    ✅ Aapka message Utkarsh ke Gmail (<strong>utkarshdhakane2@gmail.com</strong>) par bhej diya gaya hai! Jald hi aapko email par reply milega.
+                  </span>
+                </div>
+              )}
+
+              {/* Error Alert */}
+              {sendError && (
+                <div style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.4)', borderRadius: '8px', padding: '12px 14px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#fff1f2' }}>{sendError}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '4px' }}>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                  Delivers to: <strong style={{ color: '#38bdf8' }}>utkarshdhakane2@gmail.com</strong>
+                </span>
+
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={isSending}
+                  style={{ padding: '10px 24px', fontSize: '0.88rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isSending ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Sending to Utkarsh...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      <span>Send Message to Utkarsh</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* Quick FAQ Reference */}

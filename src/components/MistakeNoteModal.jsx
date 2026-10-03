@@ -32,6 +32,19 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
     }
   }, [trade]);
 
+  // Lock background page scroll and pause Lenis while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      window.__lenis?.stop();
+      return () => {
+        document.body.style.overflow = origOverflow;
+        window.__lenis?.start();
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !trade) return null;
 
   const pnl = Number(trade.pnl) || 0;
@@ -85,7 +98,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
         style={{ maxWidth: '580px', border: '1px solid rgba(244, 63, 94, 0.35)', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
       >
         {/* Header */}
-        <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px' }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '14px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--loss)' }}>
               <AlertTriangle size={20} />
@@ -104,8 +117,8 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '72vh', overflowY: 'auto' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="modal-body" data-lenis-prevent="true" style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', flex: 1, maxHeight: '68vh', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             
             {/* Trade Context Strip */}
             <div style={{

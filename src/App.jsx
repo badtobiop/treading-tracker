@@ -98,8 +98,23 @@ export default function App() {
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       smoothWheel: true,
       wheelMultiplier: 1.1,
-      touchMultiplier: 1.5
+      touchMultiplier: 1.5,
+      prevent: (node) => {
+        // Leave scroll events completely untouched for modals, dropdowns, and overlays
+        return (
+          node.classList?.contains('modal-overlay') ||
+          node.classList?.contains('modal-content') ||
+          node.classList?.contains('modal-body') ||
+          node.closest?.('.modal-overlay') ||
+          node.closest?.('.modal-content') ||
+          node.closest?.('.modal-body') ||
+          node.closest?.('[data-lenis-prevent]') ||
+          node.hasAttribute?.('data-lenis-prevent')
+        );
+      }
     });
+
+    window.__lenis = lenis;
 
     let animationFrameId;
     function raf(time) {
@@ -111,6 +126,7 @@ export default function App() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       lenis.destroy();
+      window.__lenis = null;
     };
   }, []);
 

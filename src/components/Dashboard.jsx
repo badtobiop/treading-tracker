@@ -32,6 +32,19 @@ export default function Dashboard({
   const [customExitPrice, setCustomExitPrice] = useState('');
   const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
 
+  // Lock background scroll and pause Lenis when any modal is open
+  useEffect(() => {
+    if (tradeToClose || tradeToEditMistake) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      window.__lenis?.stop();
+      return () => {
+        document.body.style.overflow = origOverflow;
+        window.__lenis?.start();
+      };
+    }
+  }, [tradeToClose, tradeToEditMistake]);
+
   // Handle Settle / Close Open Trade from Dashboard
   const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
     if (!trade) return;
@@ -87,8 +100,8 @@ export default function Dashboard({
     setTradeToClose(null);
     setCustomExitPrice('');
 
-    // If Stop Loss was hit, prompt trader to record their mistake
-    if (finalOutcome === 'SL_HIT' || pnl < 0) {
+    // ONLY if Stop Loss was strictly hit, prompt trader to record their mistake (NEVER on TP Hit)
+    if (finalOutcome === 'SL_HIT' && pnl < 0) {
       setTimeout(() => {
         setTradeToEditMistake(updatedTrade);
       }, 300);
@@ -605,7 +618,8 @@ export default function Dashboard({
                             </div>
                           </div>
                         ) : (
-                          (trade.pnl < 0 || trade.outcome === 'SL_HIT') && trade.outcome !== 'OPEN' && (
+                          // ONLY show on SL_HIT or loss trades, NEVER on TP_HIT or OPEN trades!
+                          (trade.pnl < 0 || trade.outcome === 'SL_HIT') && trade.outcome !== 'OPEN' && trade.outcome !== 'TP_HIT' && (
                             <div>
                               <button
                                 type="button"
@@ -660,7 +674,7 @@ export default function Dashboard({
               <button className="btn-icon" onClick={() => setTradeToClose(null)}>✕</button>
             </div>
 
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="modal-body" data-lenis-prevent="true" style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', maxHeight: 'calc(85vh - 120px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Ye trade market me complete ho gayi? Niche diye gaye option me se chunein ki <strong>TP Hit hua ya SL Hit</strong>:
               </p>

@@ -36,6 +36,19 @@ export default function TradeLogbook({
   const [customExitPrice, setCustomExitPrice] = useState('');
   const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
 
+  // Lock background scroll and pause Lenis when any modal is open
+  useEffect(() => {
+    if (selectedTrade || tradeToClose || tradeToEditMistake) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      window.__lenis?.stop();
+      return () => {
+        document.body.style.overflow = origOverflow;
+        window.__lenis?.start();
+      };
+    }
+  }, [selectedTrade, tradeToClose, tradeToEditMistake]);
+
   // Handle Settle / Close Open Trade (TP Hit vs SL Hit vs Breakeven vs Custom Exit)
   const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
     if (!trade) return;
@@ -92,8 +105,8 @@ export default function TradeLogbook({
     setSelectedTrade(null);
     setCustomExitPrice('');
 
-    // If Stop Loss was hit, immediately prompt trader to log their mistake
-    if (finalOutcome === 'SL_HIT' || pnl < 0) {
+    // ONLY if Stop Loss was strictly hit, prompt trader to log their mistake (NEVER on TP Hit)
+    if (finalOutcome === 'SL_HIT' && pnl < 0) {
       setTimeout(() => {
         setTradeToEditMistake(updatedTrade);
       }, 300);
@@ -447,7 +460,8 @@ export default function TradeLogbook({
                             </span>
                           </div>
                         ) : (
-                          (!isWin || trade.outcome === 'SL_HIT') && trade.outcome !== 'OPEN' && (
+                          // ONLY show Galti Likho on SL_HIT or loss trades, NEVER on TP_HIT or OPEN trades!
+                          (trade.outcome === 'SL_HIT' || Number(trade.pnl) < 0) && trade.outcome !== 'OPEN' && trade.outcome !== 'TP_HIT' && (
                             <div>
                               <button
                                 type="button"
@@ -492,19 +506,22 @@ export default function TradeLogbook({
                               <Zap size={14} />
                             </button>
                           )}
-                          <button 
-                            className="btn-icon" 
-                            style={{ 
-                              width: '28px', 
-                              height: '28px',
-                              color: trade.mistakeNote ? '#fda4af' : 'var(--text-muted)',
-                              background: trade.mistakeNote ? 'rgba(244, 63, 94, 0.18)' : 'transparent'
-                            }}
-                            onClick={() => setTradeToEditMistake(trade)}
-                            title={trade.mistakeNote ? "Edit Mistake / Post-Mortem Note" : "SL kyu hit hua? Galti note karein"}
-                          >
-                            <AlertTriangle size={14} />
-                          </button>
+                          {/* Only show warning icon for Loss/SL trades or if note already exists, NEVER on TP_HIT! */}
+                          {((trade.outcome === 'SL_HIT' || Number(trade.pnl) < 0) && trade.outcome !== 'TP_HIT' || !!trade.mistakeNote) && (
+                            <button 
+                              className="btn-icon" 
+                              style={{ 
+                                width: '28px', 
+                                height: '28px',
+                                color: trade.mistakeNote ? '#fda4af' : '#fb7185',
+                                background: trade.mistakeNote ? 'rgba(244, 63, 94, 0.18)' : 'rgba(244, 63, 94, 0.08)'
+                              }}
+                              onClick={() => setTradeToEditMistake(trade)}
+                              title={trade.mistakeNote ? "Edit Mistake / Post-Mortem Note" : "SL kyu hit hua? Galti note karein"}
+                            >
+                              <AlertTriangle size={14} />
+                            </button>
+                          )}
                           <button 
                             className="btn-icon" 
                             style={{ width: '28px', height: '28px' }}
@@ -555,7 +572,7 @@ export default function TradeLogbook({
               </button>
             </div>
 
-            <div className="modal-body">
+            <div className="modal-body" data-lenis-prevent="true" style={{ overflowY: 'auto', maxHeight: 'calc(85vh - 120px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               {/* If Open Trade: Show Quick Settle Panel right at top of detail modal */}
               {selectedTrade.outcome === 'OPEN' && (
                 <div style={{ background: 'linear-gradient(135deg, rgba(20, 25, 45, 0.95), rgba(15, 23, 42, 0.95))', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '12px', padding: '16px', marginBottom: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
@@ -750,7 +767,7 @@ export default function TradeLogbook({
                   )}
                 </div>
               ) : (
-                (Number(selectedTrade.pnl) < 0 || selectedTrade.outcome === 'SL_HIT') && selectedTrade.outcome !== 'OPEN' && (
+                (Number(selectedTrade.pnl) < 0 || selectedTrade.outcome === 'SL_HIT') && selectedTrade.outcome !== 'OPEN' && selectedTrade.outcome !== 'TP_HIT' && (
                   <div className="card" style={{ padding: '12px 14px', border: '1px dashed rgba(244, 63, 94, 0.35)', background: 'rgba(244, 63, 94, 0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                       🛑 <strong>SL Hit Hua Tha:</strong> Apni galti note karein taaki future me repeat na ho.
@@ -805,7 +822,7 @@ export default function TradeLogbook({
               <button className="btn-icon" onClick={() => setTradeToClose(null)}>✕</button>
             </div>
 
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="modal-body" data-lenis-prevent="true" style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', maxHeight: 'calc(85vh - 120px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Ye trade market me complete ho gayi? Niche diye gaye option me se chunein ki <strong>TP Hit hua ya SL Hit</strong>:
               </p>

@@ -14,9 +14,11 @@ import {
   Zap,
   Plus,
   Sparkles,
-  Target
+  Target,
+  AlertTriangle
 } from 'lucide-react';
 import { formatCurrency, calculateDayOfWeekStats, calculateAssetStats } from '../utils/calculations';
+import MistakeNoteModal from './MistakeNoteModal';
 
 export default function Dashboard({ 
   trades, 
@@ -28,6 +30,7 @@ export default function Dashboard({
 }) {
   const [tradeToClose, setTradeToClose] = useState(null);
   const [customExitPrice, setCustomExitPrice] = useState('');
+  const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
 
   // Handle Settle / Close Open Trade from Dashboard
   const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
@@ -83,6 +86,13 @@ export default function Dashboard({
 
     setTradeToClose(null);
     setCustomExitPrice('');
+
+    // If Stop Loss was hit, prompt trader to record their mistake
+    if (finalOutcome === 'SL_HIT' || pnl < 0) {
+      setTimeout(() => {
+        setTradeToEditMistake(updatedTrade);
+      }, 300);
+    }
   };
 
   const dayStats = calculateDayOfWeekStats(trades);
@@ -565,6 +575,61 @@ export default function Dashboard({
                             </button>
                           </div>
                         )}
+
+                        {/* Mistake Note Tag / Galti Likho Button */}
+                        {trade.mistakeNote ? (
+                          <div>
+                            <div 
+                              onClick={() => setTradeToEditMistake(trade)}
+                              style={{
+                                cursor: 'pointer',
+                                marginTop: '3px',
+                                padding: '2px 6px',
+                                background: 'rgba(244, 63, 94, 0.12)',
+                                border: '1px solid rgba(244, 63, 94, 0.35)',
+                                borderRadius: '4px',
+                                color: '#fca5a5',
+                                fontSize: '0.67rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                maxWidth: '140px',
+                                textAlign: 'left'
+                              }}
+                              title={`Galti / Mistake: "${trade.mistakeNote}" (Click to edit)`}
+                            >
+                              <span>⚠️</span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {trade.mistakeNote}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          (trade.pnl < 0 || trade.outcome === 'SL_HIT') && trade.outcome !== 'OPEN' && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setTradeToEditMistake(trade)}
+                                style={{
+                                  marginTop: '3px',
+                                  padding: '2px 6px',
+                                  background: 'rgba(244, 63, 94, 0.12)',
+                                  border: '1px dashed rgba(244, 63, 94, 0.45)',
+                                  borderRadius: '4px',
+                                  color: '#fda4af',
+                                  fontSize: '0.65rem',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px'
+                                }}
+                                title="SL kyu hit hua? Galti likhein"
+                              >
+                                <span>⚠️</span> Galti Likho
+                              </button>
+                            </div>
+                          )
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -752,6 +817,17 @@ export default function Dashboard({
           </div>
         </div>
       )}
+
+      {/* Mistake Note & Post-Mortem Modal */}
+      <MistakeNoteModal 
+        isOpen={!!tradeToEditMistake}
+        trade={tradeToEditMistake}
+        onClose={() => setTradeToEditMistake(null)}
+        onSave={(updated) => {
+          if (onUpdateTrade) onUpdateTrade(updated);
+        }}
+        currency={currency}
+      />
     </div>
   );
 }

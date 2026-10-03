@@ -182,26 +182,41 @@ export async function fetchUserTradesFromTurso(user) {
       args: [userId]
     });
 
-    return (res.rows || []).map(row => ({
-      id: String(row.id),
-      date: String(row.date),
-      time: String(row.time || ''),
-      asset: String(row.asset),
-      type: String(row.type),
-      entryPrice: Number(row.entry_price),
-      exitPrice: row.exit_price !== null ? Number(row.exit_price) : null,
-      stopLoss: row.stop_loss !== null ? Number(row.stop_loss) : null,
-      takeProfit: row.take_profit !== null ? Number(row.take_profit) : null,
-      lotSize: Number(row.lot_size) || 1.0,
-      pnl: Number(row.pnl) || 0,
-      riskRewardRatio: row.risk_reward_ratio !== null ? Number(row.risk_reward_ratio) : null,
-      strategy: String(row.strategy || ''),
-      session: String(row.session || ''),
-      rulesFollowed: Boolean(row.rules_followed),
-      notes: String(row.notes || ''),
-      screenshot: row.screenshot ? String(row.screenshot) : null,
-      emotion: String(row.emotion || 'neutral')
-    }));
+    return (res.rows || []).map(row => {
+      let rawNotes = String(row.notes || '');
+      let parsedMistake = '';
+      let parsedLesson = '';
+      if (rawNotes.includes('[GALTI / MISTAKE]:')) {
+        const parts = rawNotes.split('[GALTI / MISTAKE]:');
+        rawNotes = parts[0].trim();
+        const subParts = (parts[1] || '').split('[LESSON]:');
+        parsedMistake = (subParts[0] || '').trim();
+        if (subParts[1]) parsedLesson = subParts[1].trim();
+      }
+
+      return {
+        id: String(row.id),
+        date: String(row.date),
+        time: String(row.time || ''),
+        asset: String(row.asset),
+        type: String(row.type),
+        entryPrice: Number(row.entry_price),
+        exitPrice: row.exit_price !== null ? Number(row.exit_price) : null,
+        stopLoss: row.stop_loss !== null ? Number(row.stop_loss) : null,
+        takeProfit: row.take_profit !== null ? Number(row.take_profit) : null,
+        lotSize: Number(row.lot_size) || 1.0,
+        pnl: Number(row.pnl) || 0,
+        riskRewardRatio: row.risk_reward_ratio !== null ? Number(row.risk_reward_ratio) : null,
+        strategy: String(row.strategy || ''),
+        session: String(row.session || ''),
+        rulesFollowed: Boolean(row.rules_followed),
+        notes: rawNotes,
+        mistakeNote: String(row.mistake_note || parsedMistake || ''),
+        lessonLearned: String(row.lesson_learned || parsedLesson || ''),
+        screenshot: row.screenshot ? String(row.screenshot) : null,
+        emotion: String(row.emotion || 'neutral')
+      };
+    });
   } catch (err) {
     console.warn('[Turso] Fetch notice:', err);
     return null;
@@ -232,7 +247,16 @@ export async function insertUserTradeToTurso(trade, user) {
   if (!client) return false;
 
   try {
-    await ensureTursoTables();
+    let serializedNotes = trade.notes || '';
+    if (trade.mistakeNote && !serializedNotes.includes('[GALTI / MISTAKE]:')) {
+      serializedNotes = serializedNotes 
+        ? `${serializedNotes}\n\n[GALTI / MISTAKE]: ${trade.mistakeNote}` 
+        : `[GALTI / MISTAKE]: ${trade.mistakeNote}`;
+    }
+    if (trade.lessonLearned && !serializedNotes.includes('[LESSON]:')) {
+      serializedNotes = `${serializedNotes}\n[LESSON]: ${trade.lessonLearned}`;
+    }
+
     await client.execute({
       sql: `INSERT INTO trades (
               id, user_id, date, time, asset, type, 
@@ -275,7 +299,7 @@ export async function insertUserTradeToTurso(trade, user) {
         trade.strategy || '',
         trade.session || '',
         trade.rulesFollowed ? 1 : 0,
-        trade.notes || '',
+        serializedNotes,
         trade.screenshot || null,
         trade.emotion || 'neutral'
       ]

@@ -14,9 +14,11 @@ import {
   Target,
   Zap,
   CheckCircle2,
-  Clock
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
+import MistakeNoteModal from './MistakeNoteModal';
 
 export default function TradeLogbook({ 
   trades, 
@@ -32,6 +34,7 @@ export default function TradeLogbook({
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [tradeToClose, setTradeToClose] = useState(null);
   const [customExitPrice, setCustomExitPrice] = useState('');
+  const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
 
   // Handle Settle / Close Open Trade (TP Hit vs SL Hit vs Breakeven vs Custom Exit)
   const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
@@ -88,6 +91,13 @@ export default function TradeLogbook({
     setTradeToClose(null);
     setSelectedTrade(null);
     setCustomExitPrice('');
+
+    // If Stop Loss was hit, immediately prompt trader to log their mistake
+    if (finalOutcome === 'SL_HIT' || pnl < 0) {
+      setTimeout(() => {
+        setTradeToEditMistake(updatedTrade);
+      }, 300);
+    }
   };
 
   // Outcome statistics for Monthly Progress
@@ -104,7 +114,8 @@ export default function TradeLogbook({
     const searchMatch = !searchTerm || 
       (t.asset && t.asset.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (t.strategy && t.strategy.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase()));
+      (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (t.mistakeNote && t.mistakeNote.toLowerCase().includes(searchTerm.toLowerCase()));
 
     // Asset
     const assetMatch = assetFilter === 'ALL' || t.asset === assetFilter;
@@ -118,7 +129,9 @@ export default function TradeLogbook({
       (statusFilter === 'TP_HIT' && (t.outcome === 'TP_HIT' || (pnl > 0 && !t.outcome))) ||
       (statusFilter === 'SL_HIT' && (t.outcome === 'SL_HIT' || (pnl < 0 && !t.outcome))) ||
       (statusFilter === 'WIN' && pnl > 0) ||
-      (statusFilter === 'LOSS' && pnl < 0);
+      (statusFilter === 'LOSS' && pnl < 0) ||
+      (statusFilter === 'MISTAKES' && !!t.mistakeNote) ||
+      (statusFilter === 'UNREVIEWED_LOSS' && (pnl < 0 || t.outcome === 'SL_HIT') && !t.mistakeNote);
 
     return searchMatch && assetMatch && typeMatch && statusMatch;
   });
@@ -185,6 +198,8 @@ export default function TradeLogbook({
               <option value="SL_HIT">🛑 SL Hit Trades ({slHitCount})</option>
               <option value="WIN">Profits (Wins)</option>
               <option value="LOSS">Losses</option>
+              <option value="MISTAKES">⚠️ With Mistake Notes ({trades.filter(t => t.mistakeNote).length})</option>
+              <option value="UNREVIEWED_LOSS">🚨 Unreviewed Losses ({trades.filter(t => (Number(t.pnl) < 0 || t.outcome === 'SL_HIT') && !t.mistakeNote).length})</option>
             </select>
 
             <button className="btn btn-primary" onClick={onOpenLogModal}>
@@ -401,6 +416,67 @@ export default function TradeLogbook({
                             {trade.pnlPercent > 0 ? '+' : ''}{trade.pnlPercent}%
                           </div>
                         )}
+
+                        {/* Mistake Note Tag / Galti Likho Button */}
+                        {trade.mistakeNote ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTradeToEditMistake(trade);
+                            }}
+                            style={{
+                              marginTop: '4px',
+                              padding: '3px 8px',
+                              background: 'rgba(244, 63, 94, 0.12)',
+                              border: '1px solid rgba(244, 63, 94, 0.35)',
+                              borderRadius: '6px',
+                              color: '#fca5a5',
+                              fontSize: '0.72rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              maxWidth: '180px',
+                              textAlign: 'left'
+                            }}
+                            title={`Galti / Mistake: "${trade.mistakeNote}" (Click to view/edit)`}
+                          >
+                            <span style={{ flexShrink: 0 }}>⚠️</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {trade.mistakeNote}
+                            </span>
+                          </div>
+                        ) : (
+                          (!isWin || trade.outcome === 'SL_HIT') && trade.outcome !== 'OPEN' && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTradeToEditMistake(trade);
+                                }}
+                                style={{
+                                  marginTop: '4px',
+                                  padding: '2px 8px',
+                                  background: 'rgba(244, 63, 94, 0.14)',
+                                  border: '1px dashed rgba(244, 63, 94, 0.5)',
+                                  borderRadius: '5px',
+                                  color: '#fda4af',
+                                  fontSize: '0.70rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title="Click karein aur likhein ki is trade me kya galti hui jisse SL hit hua"
+                              >
+                                <span>⚠️</span> + Galti Likho
+                              </button>
+                            </div>
+                          )
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -416,6 +492,19 @@ export default function TradeLogbook({
                               <Zap size={14} />
                             </button>
                           )}
+                          <button 
+                            className="btn-icon" 
+                            style={{ 
+                              width: '28px', 
+                              height: '28px',
+                              color: trade.mistakeNote ? '#fda4af' : 'var(--text-muted)',
+                              background: trade.mistakeNote ? 'rgba(244, 63, 94, 0.18)' : 'transparent'
+                            }}
+                            onClick={() => setTradeToEditMistake(trade)}
+                            title={trade.mistakeNote ? "Edit Mistake / Post-Mortem Note" : "SL kyu hit hua? Galti note karein"}
+                          >
+                            <AlertTriangle size={14} />
+                          </button>
                           <button 
                             className="btn-icon" 
                             style={{ width: '28px', height: '28px' }}
@@ -636,6 +725,47 @@ export default function TradeLogbook({
                 </div>
               </div>
 
+              {/* Mistake & Post-Mortem Card */}
+              {selectedTrade.mistakeNote ? (
+                <div className="card" style={{ padding: '14px', border: '1px solid rgba(244, 63, 94, 0.4)', background: 'rgba(244, 63, 94, 0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.76rem', color: '#fda4af', fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertTriangle size={15} /> Trade Mistake & Post-Mortem Note
+                    </span>
+                    <button 
+                      type="button" 
+                      onClick={() => { setTradeToEditMistake(selectedTrade); }}
+                      style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'rgba(244, 63, 94, 0.2)', color: '#fda4af', border: '1px solid rgba(244, 63, 94, 0.4)', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Edit Note
+                    </button>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#fecaca', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    {selectedTrade.mistakeNote}
+                  </p>
+                  {selectedTrade.lessonLearned && (
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed rgba(244, 63, 94, 0.25)', fontSize: '0.8rem', color: '#93c5fd' }}>
+                      💡 <strong>Future Rule:</strong> {selectedTrade.lessonLearned}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                (Number(selectedTrade.pnl) < 0 || selectedTrade.outcome === 'SL_HIT') && selectedTrade.outcome !== 'OPEN' && (
+                  <div className="card" style={{ padding: '12px 14px', border: '1px dashed rgba(244, 63, 94, 0.35)', background: 'rgba(244, 63, 94, 0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      🛑 <strong>SL Hit Hua Tha:</strong> Apni galti note karein taaki future me repeat na ho.
+                    </div>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.76rem', padding: '4px 10px', color: '#fda4af', borderColor: 'rgba(244, 63, 94, 0.4)' }}
+                      onClick={() => setTradeToEditMistake(selectedTrade)}
+                    >
+                      ⚠️ + Galti Likho
+                    </button>
+                  </div>
+                )
+              )}
+
               {selectedTrade.notes && (
                 <div className="card" style={{ padding: '14px' }}>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Trade Rationale & Notes</span>
@@ -832,6 +962,20 @@ export default function TradeLogbook({
           </div>
         </div>
       )}
+
+      {/* Mistake Note & Post-Mortem Modal */}
+      <MistakeNoteModal 
+        isOpen={!!tradeToEditMistake}
+        trade={tradeToEditMistake}
+        onClose={() => setTradeToEditMistake(null)}
+        onSave={(updated) => {
+          if (onUpdateTrade) onUpdateTrade(updated);
+          if (selectedTrade && selectedTrade.id === updated.id) {
+            setSelectedTrade(updated);
+          }
+        }}
+        currency={currency}
+      />
     </div>
   );
 }

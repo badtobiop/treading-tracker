@@ -70,7 +70,8 @@ export default function LogTradeModal({
     session: 'New York',
     emotion: 'Disciplined',
     rulesFollowed: true,
-    notes: ''
+    notes: '',
+    mistakeNote: ''
   });
 
   // Leverage selection for position sizer (default 50x for Gold / Forex)
@@ -362,7 +363,8 @@ export default function LogTradeModal({
       session: tradeData.session || 'New York',
       emotion: tradeData.emotion || 'Disciplined',
       rulesFollowed: tradeData.rulesFollowed ?? true,
-      notes: tradeData.notes || (activeTab === 'ai' ? aiPrompt : '')
+      notes: tradeData.notes || (activeTab === 'ai' ? aiPrompt : ''),
+      mistakeNote: tradeData.mistakeNote || ''
     };
 
     if (finalTrade.pnl > 0 || finalTrade.outcome === 'TP_HIT') {
@@ -1065,6 +1067,69 @@ export default function LogTradeModal({
                     onChange={e => handleInputChange('notes', e.target.value)}
                   />
                 </div>
+
+                {/* POST-MORTEM & MISTAKE ANALYSIS IF SL_HIT OR NEGATIVE PNL */}
+                {(formData.outcome === 'SL_HIT' || (formData.outcome !== 'OPEN' && Number(formData.pnl) < 0)) && (
+                  <div className="form-group full-width" style={{
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.3)',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    marginTop: '6px'
+                  }}>
+                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fda4af', fontWeight: 700 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⚠️</span> Trade Post-Mortem: SL kyu hit hua? (Galti Likhein)
+                      </span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Self-Review</span>
+                    </label>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                      {[
+                        '⚡ FOMO Entry',
+                        '⏳ Early Entry (No confirmation)',
+                        '🛑 Moved/Removed SL',
+                        '📉 Over-Leveraged / Big Lot',
+                        '💥 Revenge Trade',
+                        '📰 High Impact News'
+                      ].map((tag, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            const prev = formData.mistakeNote ? formData.mistakeNote.trim() : '';
+                            handleInputChange('mistakeNote', prev ? `${prev} • ${tag}` : tag);
+                          }}
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '3px 8px',
+                            background: 'rgba(244, 63, 94, 0.18)',
+                            border: '1px solid rgba(244, 63, 94, 0.35)',
+                            color: '#fda4af',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      className="form-textarea"
+                      rows={2}
+                      placeholder="e.g. Maine jaldbazi me bina candle close huye entry le li aur risk limit se zyada lot size tha..."
+                      value={formData.mistakeNote || ''}
+                      onChange={e => handleInputChange('mistakeNote', e.target.value)}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.7)',
+                        border: '1px solid rgba(244, 63, 94, 0.35)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.84rem'
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

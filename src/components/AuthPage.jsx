@@ -9,24 +9,35 @@ import {
   ShieldCheck, 
   Eye, 
   EyeOff, 
-  AlertCircle 
+  AlertCircle,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { sendNewUserRegistrationNotification } from '../services/notificationService';
 import { promptGoogleLogin } from '../services/googleAuthService';
+import { 
+  checkEmailExistsInTurso, 
+  registerUserInTurso, 
+  loginUserInTurso, 
+  syncGoogleUserToTurso 
+} from '../services/tursoService';
 
 export default function AuthPage({ onLoginSuccess }) {
   const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isNotifying, setIsNotifying] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [capital, setCapital] = useState(10000);
 
-  // Read registered users from localStorage
+  // Read registered users from localStorage (offline fallback cache)
   const getStoredUsers = () => {
     try {
       const data = localStorage.getItem('tradematrix_users');
@@ -36,9 +47,13 @@ export default function AuthPage({ onLoginSuccess }) {
     }
   };
 
-  const handleSignIn = (e) => {
+  /**
+   * Handle Sign In for Returning Users
+   */
+  const handleSignIn = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+    setSuccessMessage('');
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !password) {
@@ -46,106 +61,204 @@ export default function AuthPage({ onLoginSuccess }) {
       return;
     }
 
-    const users = getStoredUsers();
-    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
+    setIsSubmitting(true);
 
-    if (!user) {
-      setErrorMessage('No account found with this email. Please switch to "Create Account" to register.');
-      return;
+    try {
+      // 1. Verify credentials against cloud database
+      const cloudResult = await loginUserInTurso({ email: cleanEmail, password });
+
+      if (cloudResult && cloudResult.success && cloudResult.user) {
+        // Save verified active session
+        localStorage.setItem('tradematrix_current_user', JSON.stringify(cloudResult.user));
+        
+        // Cache user in local registry
+        const users = getStoredUsers();
+        if (!users.some(u => u.email.toLowerCase() === cleanEmail)) {
+          users.push(cloudResult.user);
+          localStorage.setItem('tradematrix_users', JSON.stringify(users));
+        }
+
+        onLoginSuccess(cloudResult.user);
+        return;
+      }
+
+      // If cloud returned a specific rejection (e.g. wrong password or google account)
+      if (cloudResult && cloudResult.error) {
+        setErrorMessage(cloudResult.error);
+        return;
+      }
+
+      // 2. Offline fallback check against local storage
+      const users = getStoredUsers();
+      const localUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+      if (!localUser) {
+        setErrorMessage('No account found with this email. Please switch to "Create Account" to register.');
+        return;
+      }
+
+      if (localUser.authProvider === 'google' || localUser.password === 'google_user') {
+        setErrorMessage('This account was registered using Google. Please click "Continue with Google" above to sign in.');
+        return;
+      }
+
+      if (localUser.password !== password) {
+        setErrorMessage('Incorrect password. Please verify your credentials and try again.');
+        return;
+      }
+
+      // Success via local cache
+      localStorage.setItem('tradematrix_current_user', JSON.stringify(localUser));
+      onLoginSuccess(localUser);
+    } catch (err) {
+      console.error('Sign-in error:', err);
+      setErrorMessage('An unexpected error occurred during sign-in. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (user.authProvider === 'google' || user.password === 'google_user') {
-      setErrorMessage('This account was registered using Google. Please click "Continue with Google" above to sign in.');
-      return;
-    }
-
-    if (user.password !== password) {
-      setErrorMessage('Incorrect password. Please verify your credentials and try again.');
-      return;
-    }
-
-    // Success
-    localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
-    onLoginSuccess(user);
   };
 
+  /**
+   * Handle Create Account for New Users
+   */
   const handleSignUp = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+    setSuccessMessage('');
 
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !password || !name) {
+    const cleanName = name.trim();
+
+    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
       setErrorMessage('Please fill in all required fields.');
       return;
     }
 
-    if (!cleanEmail.includes('@')) {
-      setErrorMessage('Please enter a valid Gmail or email address.');
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setErrorMessage('Please enter a valid Gmail or email address (e.g. name@gmail.com).');
       return;
     }
 
-    if (password.length < 4) {
-      setErrorMessage('Password must be at least 4 characters in length.');
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters in length.');
       return;
     }
 
-    const users = getStoredUsers();
-    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      setErrorMessage('This email address is already registered. Please sign in.');
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match. Please verify and re-enter your password.');
       return;
     }
 
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name: name.trim(),
-      email: cleanEmail,
-      password,
-      capital: Number(capital) || 10000,
-      createdAt: new Date().toISOString()
-    };
+    setIsSubmitting(true);
 
-    // Save user
-    const updatedUsers = [...users, newUser];
-    localStorage.setItem('tradematrix_users', JSON.stringify(updatedUsers));
-    localStorage.setItem('tradematrix_current_user', JSON.stringify(newUser));
-
-    // Dispatch registration email / webhook notification
-    setIsNotifying(true);
     try {
-      await sendNewUserRegistrationNotification(newUser);
+      // 1. Strict Duplicate Email Verification against Cloud DB & Local Storage
+      const isDuplicateInCloud = await checkEmailExistsInTurso(cleanEmail);
+      const localUsers = getStoredUsers();
+      const isDuplicateInLocal = localUsers.some(u => u.email.toLowerCase() === cleanEmail);
+
+      if (isDuplicateInCloud || isDuplicateInLocal) {
+        setErrorMessage('This email address is already registered on TradeMatrix. Please switch to "Sign In" to access your account.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. Register account in Cloud Database
+      const regResult = await registerUserInTurso({
+        name: cleanName,
+        email: cleanEmail,
+        password,
+        capital: Number(capital) || 10000
+      });
+
+      if (!regResult.success) {
+        setErrorMessage(regResult.error || 'Failed to create account. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const newUser = regResult.user || {
+        id: `usr_${Date.now()}`,
+        name: cleanName,
+        email: cleanEmail,
+        password,
+        capital: Number(capital) || 10000,
+        authProvider: 'email',
+        createdAt: new Date().toISOString()
+      };
+
+      // 3. Update local user cache & active session
+      const updatedUsers = [...localUsers, { ...newUser, password }];
+      localStorage.setItem('tradematrix_users', JSON.stringify(updatedUsers));
+      localStorage.setItem('tradematrix_current_user', JSON.stringify(newUser));
+
+      // 4. Send email notification to admin
+      try {
+        await sendNewUserRegistrationNotification(newUser);
+      } catch (notifyErr) {
+        console.warn('Registration notification alert notice:', notifyErr);
+      }
+
+      onLoginSuccess(newUser);
     } catch (err) {
-      console.error('Registration notification error:', err);
+      console.error('Registration error:', err);
+      setErrorMessage('Failed to complete registration. Please check your connection and try again.');
     } finally {
-      setIsNotifying(false);
+      setIsSubmitting(false);
     }
-
-    onLoginSuccess(newUser);
   };
 
-  const handleGoogleSuccess = async (googleUser) => {
-    const users = getStoredUsers();
-    const existing = users.find(u => u.email.toLowerCase() === googleUser.email.toLowerCase());
-    if (!existing) {
-      users.push(googleUser);
+  /**
+   * Handle Google OAuth 2.0 Success
+   */
+  const handleGoogleSuccess = async (googleProfile) => {
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      // Sync Google user with Cloud Database
+      const syncResult = await syncGoogleUserToTurso(googleProfile);
+      const user = syncResult?.user || googleProfile;
+
+      // Update local storage
+      const users = getStoredUsers();
+      const existingIndex = users.findIndex(u => u.email.toLowerCase() === user.email.toLowerCase());
+      if (existingIndex >= 0) {
+        users[existingIndex] = { ...users[existingIndex], ...user };
+      } else {
+        users.push(user);
+        // If brand new Google user, notify admin
+        try {
+          await sendNewUserRegistrationNotification(user);
+        } catch (e) {
+          console.warn('Google registration notification notice:', e);
+        }
+      }
       localStorage.setItem('tradematrix_users', JSON.stringify(users));
-      // Notify admin on new Google signup
-      await sendNewUserRegistrationNotification(googleUser);
+      localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
+
+      onLoginSuccess(user);
+    } catch (err) {
+      console.error('Google login processing error:', err);
+      setErrorMessage('Failed to synchronize your Google account. Please try again or use password login.');
+    } finally {
+      setIsSubmitting(false);
     }
-    localStorage.setItem('tradematrix_current_user', JSON.stringify(googleUser));
-    onLoginSuccess(googleUser);
   };
 
+  /**
+   * Trigger Google OAuth 2.0 Account Picker Popup
+   */
   const handleGoogleBtnClick = () => {
     setErrorMessage('');
+    setSuccessMessage('');
     promptGoogleLogin({
       onSuccess: (googleUser) => {
         handleGoogleSuccess(googleUser);
       },
       onError: (err) => {
-        console.warn('Google sign-in error:', err);
+        console.warn('Google sign-in notice:', err);
         setErrorMessage(
-          err.message || 'Google sign-in popup was closed or encountered an issue. You can sign in using your email and password below.'
+          err.message || 'Google sign-in popup was closed or cancelled. You can sign in using your email and password below.'
         );
       }
     });
@@ -165,19 +278,27 @@ export default function AuthPage({ onLoginSuccess }) {
           </p>
         </div>
 
-        {/* Tab Toggle: Sign In vs Sign Up */}
+        {/* Tab Toggle: Sign In vs Create Account */}
         <div className="auth-tabs">
           <button 
             type="button"
             className={`auth-tab-btn ${authMode === 'signin' ? 'active' : ''}`}
-            onClick={() => { setAuthMode('signin'); setErrorMessage(''); }}
+            onClick={() => { 
+              setAuthMode('signin'); 
+              setErrorMessage(''); 
+              setSuccessMessage(''); 
+            }}
           >
             Sign In
           </button>
           <button 
             type="button"
             className={`auth-tab-btn ${authMode === 'signup' ? 'active' : ''}`}
-            onClick={() => { setAuthMode('signup'); setErrorMessage(''); }}
+            onClick={() => { 
+              setAuthMode('signup'); 
+              setErrorMessage(''); 
+              setSuccessMessage(''); 
+            }}
           >
             Create Account
           </button>
@@ -185,18 +306,38 @@ export default function AuthPage({ onLoginSuccess }) {
 
         {/* Error Notification Banner */}
         {errorMessage && (
-          <div className="auth-error-banner">
-            <AlertCircle size={16} style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: '0.84rem', lineHeight: 1.4 }}>{errorMessage}</span>
+          <div className="auth-error-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span style={{ fontSize: '0.85rem', lineHeight: 1.45 }}>{errorMessage}</span>
           </div>
         )}
 
-        {/* GOOGLE SIGN IN BUTTON */}
-        <div style={{ margin: '4px 0 12px 0' }}>
+        {/* Success Notification Banner */}
+        {successMessage && (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.12)',
+            color: '#34d399',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {/* GOOGLE SIGN IN BUTTON (Multi-Account Picker via Google OAuth 2.0) */}
+        <div style={{ margin: '2px 0 10px 0' }}>
           <button
             type="button"
             className="auth-google-btn"
             onClick={handleGoogleBtnClick}
+            disabled={isSubmitting}
+            title="Sign in with your verified Google account"
           >
             {/* Google Multicolor 'G' */}
             <svg width="20" height="20" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
@@ -210,12 +351,14 @@ export default function AuthPage({ onLoginSuccess }) {
 
           <div className="auth-divider">
             <div className="auth-divider-line" />
-            <span className="auth-divider-text">or sign in with password</span>
+            <span className="auth-divider-text">
+              {authMode === 'signin' ? 'or sign in with password' : 'or register with password'}
+            </span>
             <div className="auth-divider-line" />
           </div>
         </div>
 
-        {/* SIGN IN FORM */}
+        {/* MODE 1: SIGN IN FORM */}
         {authMode === 'signin' ? (
           <form className="auth-form" onSubmit={handleSignIn}>
             <div className="form-group">
@@ -225,10 +368,11 @@ export default function AuthPage({ onLoginSuccess }) {
                 <input 
                   type="email"
                   className="form-input"
-                  placeholder="Enter your Gmail address"
+                  placeholder="Enter your registered email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   autoFocus
+                  required
                 />
               </div>
             </div>
@@ -240,10 +384,11 @@ export default function AuthPage({ onLoginSuccess }) {
                 <input 
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder="Enter your password"
+                  placeholder="Enter your account password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   style={{ paddingRight: '40px' }}
+                  required
                 />
                 <button 
                   type="button" 
@@ -256,13 +401,50 @@ export default function AuthPage({ onLoginSuccess }) {
               </div>
             </div>
 
-            <button type="submit" className="btn btn-primary" style={{ padding: '12px', fontSize: '0.95rem', marginTop: '6px' }}>
-              <span>Sign In to Terminal</span>
-              <ArrowRight size={17} />
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              style={{ padding: '12px', fontSize: '0.95rem', marginTop: '6px' }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={17} className="animate-spin" />
+                  <span>Verifying Credentials...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Terminal</span>
+                  <ArrowRight size={17} />
+                </>
+              )}
             </button>
+
+            <div style={{ textAlign: 'center', marginTop: '4px' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { 
+                    setAuthMode('signup'); 
+                    setErrorMessage(''); 
+                  }}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: 'var(--accent-rose)', 
+                    fontWeight: 600, 
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Create Account
+                </button>
+              </span>
+            </div>
           </form>
         ) : (
-          /* SIGN UP FORM */
+          /* MODE 2: CREATE ACCOUNT FORM */
           <form className="auth-form" onSubmit={handleSignUp}>
             <div className="form-group">
               <label className="form-label">Full Name</label>
@@ -271,10 +453,11 @@ export default function AuthPage({ onLoginSuccess }) {
                 <input 
                   type="text"
                   className="form-input"
-                  placeholder="Enter your name"
+                  placeholder="Enter your full name"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   autoFocus
+                  required
                 />
               </div>
             </div>
@@ -286,24 +469,26 @@ export default function AuthPage({ onLoginSuccess }) {
                 <input 
                   type="email"
                   className="form-input"
-                  placeholder="Enter your email address"
+                  placeholder="Enter a new email address"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
+                  required
                 />
               </div>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Password</label>
+              <label className="form-label">Create Password</label>
               <div className="auth-input-wrapper">
                 <Lock size={17} />
                 <input 
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder="Enter your password (min. 4 characters)"
+                  placeholder="Create password (min. 6 characters)"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   style={{ paddingRight: '40px' }}
+                  required
                 />
                 <button 
                   type="button" 
@@ -312,6 +497,30 @@ export default function AuthPage({ onLoginSuccess }) {
                   title={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Confirm Password</label>
+              <div className="auth-input-wrapper">
+                <Lock size={17} />
+                <input 
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Re-enter your password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  style={{ paddingRight: '40px' }}
+                  required
+                />
+                <button 
+                  type="button" 
+                  style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
@@ -334,13 +543,61 @@ export default function AuthPage({ onLoginSuccess }) {
               type="submit" 
               className="btn btn-primary" 
               style={{ padding: '12px', fontSize: '0.95rem', marginTop: '6px' }}
-              disabled={isNotifying}
+              disabled={isSubmitting}
             >
-              <ShieldCheck size={18} />
-              <span>{isNotifying ? 'Registering & Notifying...' : 'Create Account & Access Terminal'}</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={17} className="animate-spin" />
+                  <span>Registering & Setting Up Terminal...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={18} />
+                  <span>Create Account & Access Terminal</span>
+                </>
+              )}
             </button>
+
+            <div style={{ textAlign: 'center', marginTop: '4px' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Already registered?{' '}
+                <button
+                  type="button"
+                  onClick={() => { 
+                    setAuthMode('signin'); 
+                    setErrorMessage(''); 
+                  }}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    color: 'var(--accent-rose)', 
+                    fontWeight: 600, 
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Sign In
+                </button>
+              </span>
+            </div>
           </form>
         )}
+
+        {/* Security Session Footer Notice */}
+        <div style={{
+          textAlign: 'center',
+          fontSize: '0.74rem',
+          color: 'var(--text-muted)',
+          borderTop: '1px solid rgba(244, 114, 182, 0.12)',
+          paddingTop: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px'
+        }}>
+          <ShieldCheck size={13} style={{ color: '#10b981' }} />
+          <span>Encrypted Session Isolation — Verified Access Only</span>
+        </div>
       </div>
     </div>
   );

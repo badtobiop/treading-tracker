@@ -182,6 +182,59 @@ function emailNotificationPlugin(env) {
           }
         });
       });
+
+      // Pass Turso environment variables into process.env for local database proxy
+      if (env.VITE_TURSO_DATABASE_URL) process.env.TURSO_DATABASE_URL = env.VITE_TURSO_DATABASE_URL;
+      if (env.VITE_TURSO_AUTH_TOKEN) process.env.TURSO_AUTH_TOKEN = env.VITE_TURSO_AUTH_TOKEN;
+
+      // Handle secure backend database proxy locally
+      server.middlewares.use('/api/db', async (req, res) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 200;
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+          res.setHeader('Access-Control-Allow-Headers', '*');
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            req.body = body ? JSON.parse(body) : {};
+          } catch {
+            req.body = {};
+          }
+
+          // Polyfill Express/Vercel response helpers for Vite Connect middleware
+          res.json = (data) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(data));
+          };
+          res.status = (code) => {
+            res.statusCode = code;
+            return res;
+          };
+
+          try {
+            const { default: dbHandler } = await import('./api/db.js');
+            await dbHandler(req, res);
+          } catch (err) {
+            console.error('[Vite DB Proxy Error]:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message || 'Database handler error' }));
+          }
+        });
+      });
     }
   };
 }

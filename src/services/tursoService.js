@@ -48,6 +48,17 @@ export async function ensureTursoTables() {
 
   try {
     await client.batch([
+      `CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        name TEXT,
+        avatar TEXT,
+        capital REAL DEFAULT 10000,
+        auth_provider TEXT DEFAULT 'email',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
       `CREATE TABLE IF NOT EXISTS profiles (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -377,3 +388,311 @@ export async function resetUserTradesInTurso(user) {
     return false;
   }
 }
+
+/**
+ * Check if an email address is already registered in Turso Cloud Database
+ */
+export async function checkEmailExistsInTurso(email) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  if (!cleanEmail) return false;
+
+  // 1. Try backend proxy /api/db
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'checkEmailExists', email: cleanEmail })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return Boolean(data.exists);
+    }
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) return false;
+
+  try {
+    await ensureTursoTables();
+    const res = await client.execute({
+      sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+      args: [cleanEmail, cleanEmail]
+    });
+    return (res.rows || []).length > 0;
+  } catch (err) {
+    console.warn('[Turso] Check email notice:', err);
+    return false;
+  }
+}
+
+/**
+ * Register a new user in Turso Cloud Database
+ */
+export async function registerUserInTurso({ name, email, password, capital }) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const cleanName = (name || '').trim();
+  const initialCapital = Number(capital) || 10000;
+
+  // 1. Try backend proxy /api/db
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'registerUser',
+        email: cleanEmail,
+        password,
+        name: cleanName,
+        capital: initialCapital
+      })
+    });
+    const data = await res.json();
+    if (data.success && data.user) {
+      return { success: true, user: data.user };
+    }
+    if (data.error) {
+      return { success: false, error: data.error };
+    }
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) {
+    return { success: false, error: 'Database service unavailable. Please check your internet connection.' };
+  }
+
+  try {
+    await ensureTursoTables();
+
+    // Check if duplicate
+    const existing = await client.execute({
+      sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+      args: [cleanEmail, cleanEmail]
+    });
+
+    if ((existing.rows || []).length > 0) {
+      return { 
+        success: false, 
+        error: 'This email address is already registered on TradeMatrix. Please sign in instead.' 
+      };
+    }
+
+    const newId = `usr_${Date.now()}`;
+    await client.batch([
+      {
+        sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+              VALUES (?, ?, ?, ?, '', ?, 'email')`,
+        args: [newId, cleanEmail, password, cleanName, initialCapital]
+      },
+      {
+        sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider)
+              VALUES (?, ?, ?, '', ?, 'email')`,
+        args: [newId, cleanEmail, cleanName, initialCapital]
+      },
+      {
+        sql: `INSERT INTO user_settings (user_id, initial_capital, currency)
+              VALUES (?, ?, '₹')
+              ON CONFLICT(user_id) DO NOTHING`,
+        args: [newId, initialCapital]
+      }
+    ]);
+
+    return {
+      success: true,
+      user: {
+        id: newId,
+        name: cleanName,
+        email: cleanEmail,
+        capital: initialCapital,
+        authProvider: 'email',
+        createdAt: new Date().toISOString()
+      }
+    };
+  } catch (err) {
+    console.error('[Turso] Registration error:', err);
+    return { success: false, error: err.message || 'Failed to complete registration in database.' };
+  }
+}
+
+/**
+ * Login user with email & password verified against Turso Cloud Database
+ */
+export async function loginUserInTurso({ email, password }) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+
+  // 1. Try backend proxy /api/db
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'loginUser', email: cleanEmail, password })
+    });
+    const data = await res.json();
+    if (data.success && data.user) {
+      return { success: true, user: data.user };
+    }
+    if (data.error) {
+      return { success: false, error: data.error };
+    }
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) {
+    return { success: false, error: 'Database service unavailable. Please check your internet connection.' };
+  }
+
+  try {
+    await ensureTursoTables();
+    const userRes = await client.execute({
+      sql: 'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+      args: [cleanEmail]
+    });
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      const profileRes = await client.execute({
+        sql: 'SELECT * FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
+      });
+
+      if (profileRes.rows && profileRes.rows.length > 0 && profileRes.rows[0].auth_provider === 'google') {
+        return {
+          success: false,
+          error: 'This account was registered using Google. Please click "Continue with Google" to sign in.'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'No account found with this email. Please switch to "Create Account" to register.'
+      };
+    }
+
+    const row = userRes.rows[0];
+
+    if (row.auth_provider === 'google') {
+      return {
+        success: false,
+        error: 'This account was registered using Google. Please click "Continue with Google" to sign in.'
+      };
+    }
+
+    if (row.password_hash !== password) {
+      return {
+        success: false,
+        error: 'Incorrect password. Please verify your credentials and try again.'
+      };
+    }
+
+    return {
+      success: true,
+      user: {
+        id: String(row.id),
+        name: String(row.name || cleanEmail.split('@')[0]),
+        email: String(row.email),
+        avatar: String(row.avatar || ''),
+        capital: Number(row.capital) || 10000,
+        authProvider: String(row.auth_provider || 'email')
+      }
+    };
+  } catch (err) {
+    console.error('[Turso] Login error:', err);
+    return { success: false, error: err.message || 'Login verification failed.' };
+  }
+}
+
+/**
+ * Synchronize Google OAuth user with Turso Cloud Database
+ */
+export async function syncGoogleUserToTurso(googleProfile) {
+  if (!googleProfile || !googleProfile.email) return null;
+  const googleEmail = googleProfile.email.toLowerCase().trim();
+
+  // 1. Try backend proxy /api/db
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'googleAuth', googleProfile })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.user) {
+        return { user: data.user, isNew: Boolean(data.isNew) };
+      }
+    }
+  } catch (e) {
+    // Fall back to direct client
+  }
+
+  // 2. Direct client fallback
+  const client = getDirectClient();
+  if (!client) {
+    return { user: googleProfile, isNew: false };
+  }
+
+  try {
+    await ensureTursoTables();
+    const existing = await client.execute({
+      sql: 'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+      args: [googleEmail]
+    });
+
+    if (existing.rows && existing.rows.length > 0) {
+      const row = existing.rows[0];
+      return {
+        isNew: false,
+        user: {
+          id: String(row.id),
+          name: String(row.name || googleProfile.name || googleEmail.split('@')[0]),
+          email: googleEmail,
+          avatar: String(googleProfile.avatar || row.avatar || ''),
+          capital: Number(row.capital) || 10000,
+          authProvider: 'google'
+        }
+      };
+    }
+
+    const userId = googleProfile.id || `usr_google_${Date.now()}`;
+    const userName = googleProfile.name || googleEmail.split('@')[0];
+    const userAvatar = googleProfile.avatar || '';
+
+    await client.batch([
+      {
+        sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+              VALUES (?, ?, 'GOOGLE_OAUTH_VERIFIED', ?, ?, 10000, 'google')
+              ON CONFLICT(id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar`,
+        args: [userId, googleEmail, userName, userAvatar]
+      },
+      {
+        sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider)
+              VALUES (?, ?, ?, ?, 10000, 'google')
+              ON CONFLICT(id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar`,
+        args: [userId, googleEmail, userName, userAvatar]
+      }
+    ]);
+
+    return {
+      isNew: true,
+      user: {
+        id: userId,
+        name: userName,
+        email: googleEmail,
+        avatar: userAvatar,
+        capital: 10000,
+        authProvider: 'google'
+      }
+    };
+  } catch (err) {
+    console.warn('[Turso] Google sync notice:', err);
+    return { user: googleProfile, isNew: false };
+  }
+}
+

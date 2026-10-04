@@ -45,8 +45,214 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { action, userId, trade, tradeId, profile } = body;
+    const { action, userId, trade, tradeId, profile, email, password, name, capital, googleProfile } = body;
 
+    // --- AUTHENTICATION ACTIONS ---
+
+    // A. Check if email already exists
+    if (action === 'checkEmailExists') {
+      const cleanEmail = (email || '').toLowerCase().trim();
+      if (!cleanEmail) {
+        return res.status(400).json({ error: 'Missing email parameter' });
+      }
+      const existing = await client.execute({
+        sql: 'SELECT id, email FROM users WHERE LOWER(email) = ? UNION SELECT id, email FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail, cleanEmail]
+      });
+      return res.status(200).json({ exists: existing.rows.length > 0 });
+    }
+
+    // B. Register new user account
+    if (action === 'registerUser') {
+      const cleanEmail = (email || '').toLowerCase().trim();
+      if (!cleanEmail || !password || !name) {
+        return res.status(400).json({ error: 'Full name, email address, and password are required.' });
+      }
+
+      // Check if email already exists
+      const existing = await client.execute({
+        sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail, cleanEmail]
+      });
+
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ 
+          success: false, 
+          error: 'This email address is already registered on TradeMatrix. Please sign in instead.' 
+        });
+      }
+
+      const newId = `usr_${Date.now()}`;
+      const initialCapital = Number(capital) || 10000;
+      const cleanName = String(name).trim();
+
+      await client.batch([
+        {
+          sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+                VALUES (?, ?, ?, ?, ?, ?, 'email')`,
+          args: [newId, cleanEmail, password, cleanName, '', initialCapital]
+        },
+        {
+          sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider)
+                VALUES (?, ?, ?, ?, ?, 'email')`,
+          args: [newId, cleanEmail, cleanName, '', initialCapital]
+        },
+        {
+          sql: `INSERT INTO user_settings (user_id, initial_capital, currency)
+                VALUES (?, ?, '₹')
+                ON CONFLICT(user_id) DO NOTHING`,
+          args: [newId, initialCapital]
+        }
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          id: newId,
+          name: cleanName,
+          email: cleanEmail,
+          capital: initialCapital,
+          authProvider: 'email',
+          createdAt: new Date().toISOString()
+        }
+      });
+    }
+
+    // C. User login with password
+    if (action === 'loginUser') {
+      const cleanEmail = (email || '').toLowerCase().trim();
+      if (!cleanEmail || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+      }
+
+      const userRes = await client.execute({
+        sql: 'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
+      });
+
+      if (userRes.rows.length === 0) {
+        // Check profiles table (legacy or Google OAuth)
+        const profileRes = await client.execute({
+          sql: 'SELECT * FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+          args: [cleanEmail]
+        });
+
+        if (profileRes.rows.length > 0 && profileRes.rows[0].auth_provider === 'google') {
+          return res.status(400).json({
+            success: false,
+            error: 'This account was registered using Google. Please click "Continue with Google" to sign in.'
+          });
+        }
+
+        return res.status(404).json({
+          success: false,
+          error: 'No account found with this email. Please switch to "Create Account" to register.'
+        });
+      }
+
+      const userRow = userRes.rows[0];
+
+      if (userRow.auth_provider === 'google') {
+        return res.status(400).json({
+          success: false,
+          error: 'This account was registered using Google. Please click "Continue with Google" to sign in.'
+        });
+      }
+
+      if (userRow.password_hash !== password) {
+        return res.status(401).json({
+          success: false,
+          error: 'Incorrect password. Please verify your credentials and try again.'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          id: String(userRow.id),
+          name: String(userRow.name || cleanEmail.split('@')[0]),
+          email: String(userRow.email),
+          avatar: String(userRow.avatar || ''),
+          capital: Number(userRow.capital) || 10000,
+          authProvider: String(userRow.auth_provider || 'email')
+        }
+      });
+    }
+
+    // D. Google OAuth user verification & sync
+    if (action === 'googleAuth') {
+      if (!googleProfile || !googleProfile.email) {
+        return res.status(400).json({ error: 'Valid Google profile is required.' });
+      }
+
+      const googleEmail = googleProfile.email.toLowerCase().trim();
+      const existingUser = await client.execute({
+        sql: 'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+        args: [googleEmail]
+      });
+
+      if (existingUser.rows.length > 0) {
+        const row = existingUser.rows[0];
+        return res.status(200).json({
+          success: true,
+          isNew: false,
+          user: {
+            id: String(row.id),
+            name: String(row.name || googleProfile.name || googleEmail.split('@')[0]),
+            email: googleEmail,
+            avatar: String(googleProfile.avatar || row.avatar || ''),
+            capital: Number(row.capital) || 10000,
+            authProvider: 'google'
+          }
+        });
+      }
+
+      const existingProfile = await client.execute({
+        sql: 'SELECT * FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+        args: [googleEmail]
+      });
+
+      const userId = existingProfile.rows.length > 0 
+        ? String(existingProfile.rows[0].id) 
+        : `usr_google_${Date.now()}`;
+      const userName = googleProfile.name || googleEmail.split('@')[0];
+      const userAvatar = googleProfile.avatar || '';
+      const initialCapital = 10000;
+
+      await client.batch([
+        {
+          sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+                VALUES (?, ?, 'GOOGLE_OAUTH_VERIFIED', ?, ?, ?, 'google')
+                ON CONFLICT(id) DO UPDATE SET
+                  name = excluded.name,
+                  avatar = excluded.avatar`,
+          args: [userId, googleEmail, userName, userAvatar, initialCapital]
+        },
+        {
+          sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider)
+                VALUES (?, ?, ?, ?, ?, 'google')
+                ON CONFLICT(id) DO UPDATE SET
+                  name = excluded.name,
+                  avatar = excluded.avatar`,
+          args: [userId, googleEmail, userName, userAvatar, initialCapital]
+        }
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        isNew: existingProfile.rows.length === 0,
+        user: {
+          id: userId,
+          name: userName,
+          email: googleEmail,
+          avatar: userAvatar,
+          capital: initialCapital,
+          authProvider: 'google'
+        }
+      });
+    }
+
+    // --- USER ID REQUIRED ACTIONS (Trades & Profile Sync) ---
     if (!userId || typeof userId !== 'string') {
       return res.status(400).json({ error: 'Missing required userId parameter' });
     }

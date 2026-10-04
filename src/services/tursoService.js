@@ -418,8 +418,8 @@ export async function checkEmailExistsInTurso(email) {
   try {
     await ensureTursoTables();
     const res = await client.execute({
-      sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
-      args: [cleanEmail, cleanEmail]
+      sql: 'SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1',
+      args: [cleanEmail]
     });
     return (res.rows || []).length > 0;
   } catch (err) {
@@ -471,8 +471,8 @@ export async function registerUserInTurso({ name, email, password, capital }) {
 
     // Check if duplicate
     const existing = await client.execute({
-      sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
-      args: [cleanEmail, cleanEmail]
+      sql: 'SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1',
+      args: [cleanEmail]
     });
 
     if ((existing.rows || []).length > 0) {

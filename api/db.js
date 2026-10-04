@@ -56,8 +56,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing email parameter' });
       }
       const existing = await client.execute({
-        sql: 'SELECT id, email FROM users WHERE LOWER(email) = ? UNION SELECT id, email FROM profiles WHERE LOWER(email) = ? LIMIT 1',
-        args: [cleanEmail, cleanEmail]
+        sql: 'SELECT id, email FROM users WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
       });
       return res.status(200).json({ exists: existing.rows.length > 0 });
     }
@@ -69,10 +69,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Full name, email address, and password are required.' });
       }
 
-      // Check if email already exists
+      // Check if email already exists in users table
       const existing = await client.execute({
-        sql: 'SELECT id FROM users WHERE LOWER(email) = ? UNION SELECT id FROM profiles WHERE LOWER(email) = ? LIMIT 1',
-        args: [cleanEmail, cleanEmail]
+        sql: 'SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
       });
 
       if (existing.rows.length > 0) {

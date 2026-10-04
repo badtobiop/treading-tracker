@@ -8,9 +8,8 @@ import {
   ArrowRight, 
   ShieldCheck, 
   Eye, 
-  EyeOff,
-  AlertCircle,
-  Bell
+  EyeOff, 
+  AlertCircle 
 } from 'lucide-react';
 import { sendNewUserRegistrationNotification } from '../services/notificationService';
 import { promptGoogleLogin } from '../services/googleAuthService';
@@ -37,58 +36,31 @@ export default function AuthPage({ onLoginSuccess }) {
     }
   };
 
-  const handleQuickEnter = (userEmail = 'utkarshdhakane2@gmail.com', userName = 'Utkarsh') => {
-    const users = getStoredUsers();
-    let user = users.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
-    if (!user) {
-      user = {
-        id: `usr_${Date.now()}`,
-        name: userName,
-        email: userEmail.trim().toLowerCase(),
-        password: 'google_user',
-        capital: 10000,
-        createdAt: new Date().toISOString()
-      };
-      users.push(user);
-      localStorage.setItem('tradematrix_users', JSON.stringify(users));
-      sendNewUserRegistrationNotification(user).catch(() => {});
-    }
-    localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
-    onLoginSuccess(user);
-  };
-
   const handleSignIn = (e) => {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!email || !password) {
-      setErrorMessage('Please enter your Gmail address and password.');
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setErrorMessage('Please enter your Gmail / email address and password.');
       return;
     }
 
     const users = getStoredUsers();
-    let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
 
-    // Auto-create account if not found so trader is never blocked!
     if (!user) {
-      user = {
-        id: `usr_${Date.now()}`,
-        name: email.split('@')[0],
-        email: email.trim().toLowerCase(),
-        password: password,
-        capital: 10000,
-        createdAt: new Date().toISOString()
-      };
-      const updatedUsers = [...users, user];
-      localStorage.setItem('tradematrix_users', JSON.stringify(updatedUsers));
-      localStorage.setItem('tradematrix_current_user', JSON.stringify(user));
-      sendNewUserRegistrationNotification(user).catch(() => {});
-      onLoginSuccess(user);
+      setErrorMessage('No account found with this email. Please switch to "Create Account" to register.');
       return;
     }
 
-    if (user.password && user.password !== password && user.password !== 'google_user') {
-      setErrorMessage('Incorrect password. Please verify your credentials or click Instant Access.');
+    if (user.authProvider === 'google' || user.password === 'google_user') {
+      setErrorMessage('This account was registered using Google. Please click "Continue with Google" above to sign in.');
+      return;
+    }
+
+    if (user.password !== password) {
+      setErrorMessage('Incorrect password. Please verify your credentials and try again.');
       return;
     }
 
@@ -101,12 +73,13 @@ export default function AuthPage({ onLoginSuccess }) {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!email || !password || !name) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password || !name) {
       setErrorMessage('Please fill in all required fields.');
       return;
     }
 
-    if (!email.includes('@')) {
+    if (!cleanEmail.includes('@')) {
       setErrorMessage('Please enter a valid Gmail or email address.');
       return;
     }
@@ -117,16 +90,16 @@ export default function AuthPage({ onLoginSuccess }) {
     }
 
     const users = getStoredUsers();
-    const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
     if (existing) {
-      setErrorMessage('This Gmail address is already registered. Please sign in.');
+      setErrorMessage('This email address is already registered. Please sign in.');
       return;
     }
 
     const newUser = {
       id: `usr_${Date.now()}`,
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       password,
       capital: Number(capital) || 10000,
       createdAt: new Date().toISOString()
@@ -170,9 +143,9 @@ export default function AuthPage({ onLoginSuccess }) {
         handleGoogleSuccess(googleUser);
       },
       onError: (err) => {
-        console.warn('Google sign-in popup error:', err);
+        console.warn('Google sign-in error:', err);
         setErrorMessage(
-          'Google popup was closed or blocked by browser origin restrictions. Use the 1-Click Instant Access button below to sign in immediately.'
+          err.message || 'Google sign-in popup was closed or encountered an issue. You can sign in using your email and password below.'
         );
       }
     });
@@ -210,38 +183,15 @@ export default function AuthPage({ onLoginSuccess }) {
           </button>
         </div>
 
-        {/* Error Notification Banner with 1-Click Bypass Button */}
+        {/* Error Notification Banner */}
         {errorMessage && (
-          <div className="auth-error-banner" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertCircle size={16} style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '0.82rem' }}>{errorMessage}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleQuickEnter(email || 'utkarshdhakane2@gmail.com', 'Utkarsh')}
-              style={{
-                background: 'rgba(56, 189, 248, 0.25)',
-                border: '1px solid rgba(56, 189, 248, 0.5)',
-                color: '#38bdf8',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                marginTop: '4px'
-              }}
-            >
-              <span>⚡</span> Direct 1-Click Entry (No Google Popup Needed)
-            </button>
+          <div className="auth-error-banner">
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '0.84rem', lineHeight: 1.4 }}>{errorMessage}</span>
           </div>
         )}
 
-        {/* GOOGLE BUTTON + INSTANT 1-CLICK LOGIN */}
+        {/* GOOGLE SIGN IN BUTTON */}
         <div style={{ margin: '4px 0 12px 0' }}>
           <button
             type="button"
@@ -256,31 +206,6 @@ export default function AuthPage({ onLoginSuccess }) {
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
             </svg>
             <span>Continue with Google</span>
-          </button>
-
-          {/* Direct Instant Login Button (Never blocked by popup blockers) */}
-          <button
-            type="button"
-            onClick={() => handleQuickEnter('utkarshdhakane2@gmail.com', 'Utkarsh')}
-            style={{
-              width: '100%',
-              marginTop: '8px',
-              padding: '10px 14px',
-              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(99, 102, 241, 0.14) 100%)',
-              border: '1px solid rgba(56, 189, 248, 0.4)',
-              borderRadius: '8px',
-              color: '#38bdf8',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '7px'
-            }}
-          >
-            <span>⚡</span>
-            <span>Direct 1-Click Access as Utkarsh (No Password)</span>
           </button>
 
           <div className="auth-divider">
@@ -321,7 +246,7 @@ export default function AuthPage({ onLoginSuccess }) {
                   style={{ paddingRight: '40px' }}
                 />
                 <button 
-                  type="button"
+                  type="button" 
                   style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                   onClick={() => setShowPassword(!showPassword)}
                   title={showPassword ? 'Hide password' : 'Show password'}
@@ -381,7 +306,7 @@ export default function AuthPage({ onLoginSuccess }) {
                   style={{ paddingRight: '40px' }}
                 />
                 <button 
-                  type="button"
+                  type="button" 
                   style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                   onClick={() => setShowPassword(!showPassword)}
                   title={showPassword ? 'Hide password' : 'Show password'}

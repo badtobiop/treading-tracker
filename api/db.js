@@ -131,6 +131,39 @@ export default async function handler(req, res) {
       });
 
       if (userRes.rows.length === 0) {
+        // Seamless initial claim for platform owner utkarshdhakane2@gmail.com:
+        // Sets their entered password as their official permanent password and restores user session
+        const adminEmail = (process.env.TURSO_ADMIN_EMAIL || process.env.VITE_NOTIFICATION_ADMIN_EMAIL || 'utkarshdhakane2@gmail.com').toLowerCase().trim();
+        if (cleanEmail === adminEmail) {
+          const ownerId = 'usr_1790861658261'; // Original verified owner ID
+          await client.batch([
+            {
+              sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+                    VALUES (?, ?, ?, 'Utkarsh Dhakane', '', 10000, 'email')
+                    ON CONFLICT(id) DO UPDATE SET password_hash = excluded.password_hash`,
+              args: [ownerId, cleanEmail, password]
+            },
+            {
+              sql: `INSERT INTO profiles (id, email, name, avatar, capital, auth_provider)
+                    VALUES (?, ?, 'Utkarsh Dhakane', '', 10000, 'email')
+                    ON CONFLICT(id) DO UPDATE SET name = excluded.name`,
+              args: [ownerId, cleanEmail]
+            }
+          ]);
+
+          return res.status(200).json({
+            success: true,
+            user: {
+              id: ownerId,
+              name: 'Utkarsh Dhakane',
+              email: cleanEmail,
+              avatar: '',
+              capital: 10000,
+              authProvider: 'email'
+            }
+          });
+        }
+
         // Check profiles table (legacy or Google OAuth)
         const profileRes = await client.execute({
           sql: 'SELECT * FROM profiles WHERE LOWER(email) = ? LIMIT 1',

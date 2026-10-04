@@ -224,6 +224,12 @@ export default async function handler(req, res) {
         args: [googleEmail]
       });
 
+      const userPrefix = googleEmail.split('@')[0];
+      const capitalizedPrefix = userPrefix.charAt(0).toUpperCase() + userPrefix.slice(1);
+      const userName = (googleProfile.name && googleProfile.name.trim()) 
+        ? googleProfile.name.trim() 
+        : capitalizedPrefix;
+
       if (existingUser.rows.length > 0) {
         const row = existingUser.rows[0];
         return res.status(200).json({
@@ -231,7 +237,7 @@ export default async function handler(req, res) {
           isNew: false,
           user: {
             id: String(row.id),
-            name: String(row.name || googleProfile.name || googleEmail.split('@')[0]),
+            name: String(row.name || userName),
             email: googleEmail,
             avatar: String(googleProfile.avatar || row.avatar || ''),
             capital: Number(row.capital) || 10000,
@@ -248,7 +254,6 @@ export default async function handler(req, res) {
       const userId = existingProfile.rows.length > 0 
         ? String(existingProfile.rows[0].id) 
         : `usr_google_${Date.now()}`;
-      const userName = googleProfile.name || googleEmail.split('@')[0];
       const userAvatar = googleProfile.avatar || '';
       const initialCapital = 10000;
 

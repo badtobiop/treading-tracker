@@ -673,6 +673,11 @@ export async function syncGoogleUserToTurso(googleProfile) {
       sql: 'SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
       args: [googleEmail]
     });
+    const userPrefix = googleEmail.split('@')[0];
+    const capitalizedPrefix = userPrefix.charAt(0).toUpperCase() + userPrefix.slice(1);
+    const userName = (googleProfile.name && googleProfile.name.trim()) 
+      ? googleProfile.name.trim() 
+      : capitalizedPrefix;
 
     if (existing.rows && existing.rows.length > 0) {
       const row = existing.rows[0];
@@ -680,7 +685,7 @@ export async function syncGoogleUserToTurso(googleProfile) {
         isNew: false,
         user: {
           id: String(row.id),
-          name: String(row.name || googleProfile.name || googleEmail.split('@')[0]),
+          name: String(row.name || userName),
           email: googleEmail,
           avatar: String(googleProfile.avatar || row.avatar || ''),
           capital: Number(row.capital) || 10000,
@@ -690,7 +695,6 @@ export async function syncGoogleUserToTurso(googleProfile) {
     }
 
     const userId = googleProfile.id || `usr_google_${Date.now()}`;
-    const userName = googleProfile.name || googleEmail.split('@')[0];
     const userAvatar = googleProfile.avatar || '';
 
     await client.batch([

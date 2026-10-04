@@ -70,9 +70,15 @@ export function initializeTokenClient(onSuccess, onError) {
 
             const profile = await res.json();
             if (profile?.email) {
+              const userPrefix = profile.email.split('@')[0];
+              const capitalizedName = userPrefix.charAt(0).toUpperCase() + userPrefix.slice(1);
+              const displayName = (profile.name && profile.name.trim()) 
+                ? profile.name.trim() 
+                : capitalizedName;
+
               const googleUser = {
                 id: `usr_google_${profile.sub || Date.now()}`,
-                name: profile.name || profile.email.split('@')[0],
+                name: displayName,
                 email: profile.email.trim().toLowerCase(),
                 avatar: profile.picture || '',
                 capital: 10000,
@@ -176,9 +182,15 @@ export function renderOfficialGoogleButton(containerElement, onSuccess, onError)
         if (response?.credential) {
           const profile = decodeGoogleJwt(response.credential);
           if (profile?.email) {
+            const userPrefix = profile.email.split('@')[0];
+            const capitalizedName = userPrefix.charAt(0).toUpperCase() + userPrefix.slice(1);
+            const displayName = (profile.name && profile.name.trim()) 
+              ? profile.name.trim() 
+              : capitalizedName;
+
             const googleUser = {
               id: `usr_google_${profile.sub || Date.now()}`,
-              name: profile.name || profile.email.split('@')[0],
+              name: displayName,
               email: profile.email.trim().toLowerCase(),
               avatar: profile.picture || '',
               capital: 10000,

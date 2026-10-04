@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   Mail, 
@@ -11,10 +11,15 @@ import {
   EyeOff, 
   AlertCircle,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink
 } from 'lucide-react';
 import { sendNewUserRegistrationNotification } from '../services/notificationService';
-import { promptGoogleLogin } from '../services/googleAuthService';
+import { 
+  promptGoogleLogin, 
+  initializeTokenClient, 
+  renderOfficialGoogleButton 
+} from '../services/googleAuthService';
 import { 
   checkEmailExistsInTurso, 
   registerUserInTurso, 
@@ -246,6 +251,33 @@ export default function AuthPage({ onLoginSuccess }) {
   };
 
   /**
+   * Pre-initialize Google OAuth token client on mount and render official button
+   */
+  useEffect(() => {
+    // 1. Prime tokenClient ahead of time so clicking opens window synchronously
+    initializeTokenClient(handleGoogleSuccess, (err) => {
+      console.warn('Google auth notice:', err);
+      setErrorMessage(err.message || 'Google sign-in encountered an issue.');
+    });
+
+    // 2. Mount official Google iframe button (which is immune to popup blockers)
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const container = document.getElementById('google-official-btn');
+      if (container && window.google?.accounts?.id) {
+        renderOfficialGoogleButton(container, handleGoogleSuccess, (err) => {
+          console.warn('Official button error:', err);
+        });
+        clearInterval(interval);
+      }
+      if (attempts > 15) clearInterval(interval);
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  /**
    * Trigger Google OAuth 2.0 Account Picker Popup
    */
   const handleGoogleBtnClick = () => {
@@ -304,11 +336,25 @@ export default function AuthPage({ onLoginSuccess }) {
           </button>
         </div>
 
-        {/* Error Notification Banner */}
+        {/* Error Notification Banner with Browser Pop-up Guidance */}
         {errorMessage && (
-          <div className="auth-error-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-            <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span style={{ fontSize: '0.85rem', lineHeight: 1.45 }}>{errorMessage}</span>
+          <div className="auth-error-banner" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <span style={{ fontSize: '0.85rem', lineHeight: 1.45 }}>{errorMessage}</span>
+            </div>
+            {errorMessage.toLowerCase().includes('pop') && (
+              <div style={{
+                fontSize: '0.78rem',
+                background: 'rgba(255, 255, 255, 0.08)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                color: '#f8fafc',
+                lineHeight: 1.45
+              }}>
+                💡 <strong>Browser Pop-up Notice:</strong> If your browser blocked the window, look for the pop-up icon in your address bar (top-right of your browser) and select <em>"Always allow pop-ups"</em>, or use the official Google button below.
+              </div>
+            )}
           </div>
         )}
 
@@ -330,8 +376,8 @@ export default function AuthPage({ onLoginSuccess }) {
           </div>
         )}
 
-        {/* GOOGLE SIGN IN BUTTON (Multi-Account Picker via Google OAuth 2.0) */}
-        <div style={{ margin: '2px 0 10px 0' }}>
+        {/* GOOGLE SIGN IN BUTTONS (Multi-Account Picker via Google OAuth 2.0) */}
+        <div style={{ margin: '2px 0 10px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button
             type="button"
             className="auth-google-btn"
@@ -348,6 +394,18 @@ export default function AuthPage({ onLoginSuccess }) {
             </svg>
             <span>Continue with Google</span>
           </button>
+
+          {/* Official Google GIS Button (Immune to browser popup blockers) */}
+          <div 
+            id="google-official-btn" 
+            style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              minHeight: '40px',
+              borderRadius: '8px',
+              overflow: 'hidden'
+            }} 
+          />
 
           <div className="auth-divider">
             <div className="auth-divider-line" />

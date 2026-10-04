@@ -20,47 +20,40 @@ export function decodeGoogleJwt(token) {
   }
 }
 
-const DEFAULT_GOOGLE_CLIENT_ID = '966654270078-os3mj52etkg5n0td5udkftk46ahuoug1.apps.googleusercontent.com';
+export const DEFAULT_GOOGLE_CLIENT_ID = '966654270078-os3mj52etkg5n0td5udkftk46ahuoug1.apps.googleusercontent.com';
+
+export function getGoogleClientId() {
+  return (import.meta.env?.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()) 
+    || DEFAULT_GOOGLE_CLIENT_ID;
+}
+
+let tokenClientInstance = null;
+let activeSuccessCallback = null;
+let activeErrorCallback = null;
 
 /**
- * Interactive Google Login trigger using OAuth 2.0 Token Client (Strict - NO browser prompt)
+ * Pre-initializes the Google OAuth 2.0 Token Client ahead of user clicks
+ * so popup windows are NOT blocked by browser user gesture expiration
  */
-export async function promptGoogleLogin({ onSuccess, onError }) {
-  const clientId = (import.meta.env?.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()) 
-    || DEFAULT_GOOGLE_CLIENT_ID;
+export function initializeTokenClient(onSuccess, onError) {
+  if (onSuccess) activeSuccessCallback = onSuccess;
+  if (onError) activeErrorCallback = onError;
 
-  if (!clientId || clientId.trim() === '') {
-    if (onError) {
-      onError(new Error('Google Client ID is not configured. Please add VITE_GOOGLE_CLIENT_ID in your .env file.'));
-    }
-    return;
-  }
+  if (tokenClientInstance) return tokenClientInstance;
+  if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) return null;
 
-  // Ensure Google Identity Services SDK is ready (wait up to 3 seconds if initializing)
-  if (!window.google?.accounts?.oauth2) {
-    let waited = 0;
-    while (!window.google?.accounts?.oauth2 && waited < 3000) {
-      await new Promise(r => setTimeout(r, 150));
-      waited += 150;
-    }
-  }
-
-  if (!window.google?.accounts?.oauth2) {
-    if (onError) {
-      onError(new Error('Google Sign-In SDK is initializing or blocked by an ad-blocker. Please check your connection and try again.'));
-    }
-    return;
-  }
+  const clientId = getGoogleClientId();
+  if (!clientId) return null;
 
   try {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+    tokenClientInstance = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: 'email profile openid',
       callback: async (tokenResponse) => {
         if (tokenResponse?.error) {
-          console.warn('Google OAuth error:', tokenResponse.error);
-          if (onError) {
-            onError(new Error(`Google Authentication failed: ${tokenResponse.error_description || tokenResponse.error}`));
+          console.warn('Google OAuth error response:', tokenResponse.error);
+          if (activeErrorCallback) {
+            activeErrorCallback(new Error(`Google Authentication: ${tokenResponse.error_description || tokenResponse.error}`));
           }
           return;
         }
@@ -86,38 +79,139 @@ export async function promptGoogleLogin({ onSuccess, onError }) {
                 authProvider: 'google',
                 createdAt: new Date().toISOString()
               };
-              onSuccess(googleUser);
-              return;
+              if (activeSuccessCallback) {
+                activeSuccessCallback(googleUser);
+              }
             } else {
-              throw new Error('Google did not provide an email address.');
+              throw new Error('Google did not return an email address.');
             }
           } catch (fetchErr) {
             console.error('Failed to fetch userinfo from Google:', fetchErr);
-            if (onError) onError(new Error(fetchErr.message || 'Could not retrieve Google user profile.'));
+            if (activeErrorCallback) {
+              activeErrorCallback(new Error(fetchErr.message || 'Could not retrieve Google profile data.'));
+            }
           }
         }
       },
       error_callback: (err) => {
-        console.warn('Google OAuth popup closed or error:', err);
-        if (onError) {
-          if (err.type === 'popup_closed') {
-            onError(new Error('Google sign-in popup was closed before completion.'));
+        console.warn('Google OAuth popup closed or blocked:', err);
+        if (activeErrorCallback) {
+          if (err.type === 'popup_failed_to_open') {
+            activeErrorCallback(
+              new Error('Pop-up was blocked by your browser. Please click the pop-up icon in your browser URL bar to "Always allow pop-ups from this site", or use the official Google button below.')
+            );
+          } else if (err.type === 'popup_closed') {
+            activeErrorCallback(new Error('Google sign-in popup was closed before completion.'));
           } else {
-            onError(new Error(err.message || 'Google sign-in was cancelled or encountered an error.'));
+            activeErrorCallback(new Error(err.message || 'Google sign-in encountered an issue.'));
           }
         }
       }
     });
 
-    tokenClient.requestAccessToken({ prompt: 'select_account' });
+    return tokenClientInstance;
   } catch (err) {
-    console.error('Error invoking Google oauth2 client:', err);
+    console.error('Failed to initialize Google tokenClient:', err);
+    return null;
+  }
+}
+
+/**
+ * Synchronous Google Login trigger.
+ * MUST be executed synchronously on the user click event to prevent browser popup blockers.
+ */
+export function promptGoogleLogin({ onSuccess, onError }) {
+  activeSuccessCallback = onSuccess;
+  activeErrorCallback = onError;
+
+  // If not yet initialized, initialize immediately
+  let client = tokenClientInstance || initializeTokenClient(onSuccess, onError);
+
+  if (!client) {
+    // Check if Google SDK is loaded
+    if (!window.google?.accounts?.oauth2) {
+      if (onError) {
+        onError(
+          new Error('Google Identity Services SDK is still loading or was blocked by an ad-blocker. Please refresh the page or sign in with password.')
+        );
+      }
+      return;
+    }
+    client = initializeTokenClient(onSuccess, onError);
+  }
+
+  if (!client) {
     if (onError) {
-      onError(new Error(err.message || 'Failed to open Google login window.'));
+      onError(new Error('Failed to initialize Google Sign-In client. Please check your internet connection.'));
+    }
+    return;
+  }
+
+  try {
+    // Synchronously request access token with account picker
+    client.requestAccessToken({ prompt: 'select_account' });
+  } catch (err) {
+    console.error('Error invoking requestAccessToken:', err);
+    if (onError) {
+      onError(new Error('Failed to open Google login window. Check if your browser is blocking popups.'));
     }
   }
 }
 
+/**
+ * Render Google's official native button inside a container DOM element.
+ * Google's native rendered button has trusted click handling inside Google's iframe,
+ * which is 100% immune to browser popup blockers!
+ */
+export function renderOfficialGoogleButton(containerElement, onSuccess, onError) {
+  if (!containerElement || typeof window === 'undefined') return false;
+
+  const clientId = getGoogleClientId();
+  if (!clientId || !window.google?.accounts?.id) return false;
+
+  try {
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response) => {
+        if (response?.credential) {
+          const profile = decodeGoogleJwt(response.credential);
+          if (profile?.email) {
+            const googleUser = {
+              id: `usr_google_${profile.sub || Date.now()}`,
+              name: profile.name || profile.email.split('@')[0],
+              email: profile.email.trim().toLowerCase(),
+              avatar: profile.picture || '',
+              capital: 10000,
+              authProvider: 'google',
+              createdAt: new Date().toISOString()
+            };
+            if (onSuccess) onSuccess(googleUser);
+            return;
+          }
+        }
+        if (onError) onError(new Error('Google did not return valid credentials.'));
+      },
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+
+    window.google.accounts.id.renderButton(containerElement, {
+      theme: 'outline',
+      size: 'large',
+      type: 'standard',
+      shape: 'rectangular',
+      text: 'continue_with',
+      logo_alignment: 'left',
+      width: containerElement.offsetWidth > 0 ? containerElement.offsetWidth : 360
+    });
+
+    return true;
+  } catch (err) {
+    console.warn('Failed to render official Google button:', err);
+    return false;
+  }
+}
+
 // Backwards compatibility aliases
-export const initializeGoogleAuth = () => true;
-export const renderGoogleButton = () => true;
+export const initializeGoogleAuth = initializeTokenClient;
+export const renderGoogleButton = renderOfficialGoogleButton;

@@ -19,7 +19,9 @@ import {
   Zap,
   Layers,
   Target,
-  DollarSign
+  DollarSign,
+  Scissors,
+  Clock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { parseTradeWithAI } from '../services/geminiService';
@@ -65,7 +67,9 @@ export default function LogTradeModal({
     capitalRiskedPercent: 2.0,
     pnl: '',
     riskRewardRatio: '',
-    outcome: 'TP_HIT', // 'TP_HIT' | 'SL_HIT' | 'BREAKEVEN' | 'OPEN' | 'MANUAL'
+    outcome: 'TP_HIT', // 'TP_HIT' | 'SL_HIT' | 'BREAKEVEN' | 'CUSTOM_RR' | 'OPEN' | 'MANUAL'
+    realizedRR: null,
+    earlyExitReason: '',
     strategy: preselectedStrategy || (strategies?.[0]?.name || '15m Range Breakout'),
     session: 'New York',
     emotion: 'Disciplined',
@@ -73,6 +77,11 @@ export default function LogTradeModal({
     notes: '',
     mistakeNote: ''
   });
+
+  // Custom R:R & Early Exit selection state
+  const [customRR, setCustomRR] = useState(1.5);
+  const [customExitReason, setCustomExitReason] = useState('Time Ran Out / Session Close');
+  const [customExitReasonInput, setCustomExitReasonInput] = useState('');
 
   // Leverage selection for position sizer (default 50x for Gold / Forex)
   const [leverage, setLeverage] = useState(50);
@@ -250,7 +259,7 @@ export default function LogTradeModal({
       }
     }
 
-    // Auto-update PnL if outcome is TP_HIT or SL_HIT
+    // Auto-update PnL if outcome is TP_HIT, SL_HIT or CUSTOM_RR
     const effQty = parseFloat(updated.lotSize) || 0;
     if (updated.outcome === 'TP_HIT' && effQty > 0 && ePrice > 0 && tProfit > 0) {
       const rew = Math.abs(tProfit - ePrice);
@@ -260,18 +269,56 @@ export default function LogTradeModal({
       const rsk = Math.abs(ePrice - sLoss);
       updated.exitPrice = sLoss;
       updated.pnl = (-effQty * rsk).toFixed(2);
+    } else if (updated.outcome === 'CUSTOM_RR' && effQty > 0 && ePrice > 0 && sLoss > 0) {
+      const rsk = Math.abs(ePrice - sLoss);
+      const rVal = parseFloat(customRR) || 1.0;
+      const isBuy = updated.type === 'BUY';
+      const exitCalc = isBuy ? (ePrice + (rsk * rVal)) : (ePrice - (rsk * rVal));
+      updated.exitPrice = parseFloat(exitCalc.toFixed(3));
+      updated.pnl = (effQty * rsk * rVal).toFixed(2);
     }
 
     setFormData(updated);
   };
 
-  // Outcome quick-selectors: TP Hit vs SL Hit vs Breakeven vs Open
+  // Handle setting realized custom R:R (e.g. 1.0, 1.25, 1.5, 2.0)
+  const handleApplyCustomRR = (ratio, reason = null) => {
+    const rVal = parseFloat(ratio) || 1.0;
+    setCustomRR(rVal);
+    const chosenReason = reason !== null ? reason : (customExitReasonInput.trim() || customExitReason);
+    if (reason !== null) setCustomExitReason(reason);
+
+    const ePrice = parseFloat(formData.entryPrice) || 0;
+    const sLoss = parseFloat(formData.stopLoss) || 0;
+    const effQty = parseFloat(formData.lotSize) || (currentAmt > 0 && ePrice > 0 ? currentAmt / ePrice : 1);
+    const isBuy = formData.type === 'BUY';
+
+    const updated = {
+      ...formData,
+      outcome: 'CUSTOM_RR',
+      riskRewardRatio: `1:${rVal.toFixed(2)}`,
+      realizedRR: rVal,
+      earlyExitReason: chosenReason
+    };
+
+    if (ePrice > 0 && sLoss > 0) {
+      const risk = Math.abs(ePrice - sLoss);
+      const exitCalc = isBuy ? (ePrice + (risk * rVal)) : (ePrice - (risk * rVal));
+      updated.exitPrice = parseFloat(exitCalc.toFixed(3));
+      updated.pnl = (effQty * risk * rVal).toFixed(2);
+    }
+
+    setFormData(updated);
+  };
+
+  // Outcome quick-selectors: TP Hit vs SL Hit vs Breakeven vs Early R:R vs Open
   const handleSelectOutcome = (selectedOutcome) => {
     const updated = { ...formData, outcome: selectedOutcome };
     const ePrice = parseFloat(formData.entryPrice) || 0;
     const sLoss = parseFloat(formData.stopLoss) || 0;
     const tProfit = parseFloat(formData.takeProfit) || 0;
     const effQty = parseFloat(formData.lotSize) || (currentAmt > 0 && ePrice > 0 ? currentAmt / ePrice : 1);
+    const isBuy = formData.type === 'BUY';
 
     if (selectedOutcome === 'TP_HIT') {
       updated.exitPrice = tProfit || ePrice;
@@ -284,6 +331,17 @@ export default function LogTradeModal({
     } else if (selectedOutcome === 'BREAKEVEN') {
       updated.exitPrice = ePrice;
       updated.pnl = '0';
+    } else if (selectedOutcome === 'CUSTOM_RR') {
+      const rVal = parseFloat(customRR) || 1.0;
+      updated.riskRewardRatio = `1:${rVal.toFixed(2)}`;
+      updated.realizedRR = rVal;
+      updated.earlyExitReason = customExitReasonInput.trim() || customExitReason;
+      if (ePrice > 0 && sLoss > 0) {
+        const risk = Math.abs(ePrice - sLoss);
+        const exitCalc = isBuy ? (ePrice + (risk * rVal)) : (ePrice - (risk * rVal));
+        updated.exitPrice = parseFloat(exitCalc.toFixed(3));
+        updated.pnl = (effQty * risk * rVal).toFixed(2);
+      }
     } else if (selectedOutcome === 'OPEN') {
       updated.exitPrice = '';
       updated.pnl = '';
@@ -358,7 +416,9 @@ export default function LogTradeModal({
       pnl: tradeData.outcome === 'OPEN' ? 0 : (parseFloat(tradeData.pnl) || 0),
       pnlPercent: accountCapital > 0 ? ((parseFloat(tradeData.pnl) || 0) / accountCapital) * 100 : 0,
       riskRewardRatio: tradeData.riskRewardRatio || (dynamicRR ? `1:${dynamicRR}` : '1:2.0'),
-      outcome: tradeData.outcome || 'TP_HIT', // Stored explicitly: TP_HIT, SL_HIT, BREAKEVEN, OPEN
+      outcome: tradeData.outcome || 'TP_HIT', // TP_HIT, SL_HIT, BREAKEVEN, CUSTOM_RR, OPEN
+      realizedRR: tradeData.outcome === 'CUSTOM_RR' ? (parseFloat(tradeData.realizedRR || customRR) || 1.0) : null,
+      earlyExitReason: tradeData.outcome === 'CUSTOM_RR' ? (tradeData.earlyExitReason || customExitReasonInput.trim() || customExitReason) : '',
       strategy: tradeData.strategy || '15m Range Breakout',
       session: tradeData.session || 'New York',
       emotion: tradeData.emotion || 'Disciplined',
@@ -367,7 +427,7 @@ export default function LogTradeModal({
       mistakeNote: tradeData.mistakeNote || ''
     };
 
-    if (finalTrade.pnl > 0 || finalTrade.outcome === 'TP_HIT') {
+    if (finalTrade.pnl > 0 || finalTrade.outcome === 'TP_HIT' || (finalTrade.outcome === 'CUSTOM_RR' && finalTrade.pnl >= 0)) {
       confetti({ particleCount: 65, spread: 70, origin: { y: 0.8 } });
     }
 
@@ -840,7 +900,7 @@ export default function LogTradeModal({
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Auto-fills Net P&L</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px' }}>
                   {/* Option 1: 🎯 TP HIT */}
                   <button
                     type="button"
@@ -859,10 +919,10 @@ export default function LogTradeModal({
                     }}
                   >
                     <span style={{ fontSize: '1.2rem' }}>🎯</span>
-                    <strong style={{ fontSize: '0.85rem', color: formData.outcome === 'TP_HIT' ? 'var(--profit)' : 'var(--text-primary)' }}>
+                    <strong style={{ fontSize: '0.82rem', color: formData.outcome === 'TP_HIT' ? 'var(--profit)' : 'var(--text-primary)' }}>
                       TP Hit
                     </strong>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--profit)', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--profit)', fontWeight: 700 }}>
                       +{currency}{potentialProfitOnTP > 0 ? potentialProfitOnTP.toFixed(0) : 'Profit'}
                     </span>
                   </button>
@@ -885,10 +945,10 @@ export default function LogTradeModal({
                     }}
                   >
                     <span style={{ fontSize: '1.2rem' }}>🛑</span>
-                    <strong style={{ fontSize: '0.85rem', color: formData.outcome === 'SL_HIT' ? 'var(--loss)' : 'var(--text-primary)' }}>
+                    <strong style={{ fontSize: '0.82rem', color: formData.outcome === 'SL_HIT' ? 'var(--loss)' : 'var(--text-primary)' }}>
                       SL Hit
                     </strong>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--loss)', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--loss)', fontWeight: 700 }}>
                       -{currency}{potentialLossOnSL > 0 ? potentialLossOnSL.toFixed(0) : 'Loss'}
                     </span>
                   </button>
@@ -911,15 +971,42 @@ export default function LogTradeModal({
                     }}
                   >
                     <span style={{ fontSize: '1.2rem' }}>⚖️</span>
-                    <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                    <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
                       Breakeven
                     </strong>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
                       {currency}0 P&L
                     </span>
                   </button>
 
-                  {/* Option 4: ⏳ STILL OPEN */}
+                  {/* Option 4: ✂️ CUSTOM R:R / EARLY EXIT */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectOutcome('CUSTOM_RR')}
+                    style={{
+                      background: formData.outcome === 'CUSTOM_RR' ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255, 255, 255, 0.03)',
+                      border: formData.outcome === 'CUSTOM_RR' ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '10px',
+                      padding: '12px 6px',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: formData.outcome === 'CUSTOM_RR' ? '0 0 14px rgba(16, 185, 129, 0.25)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>✂️</span>
+                    <strong style={{ fontSize: '0.82rem', color: formData.outcome === 'CUSTOM_RR' ? '#10b981' : 'var(--text-primary)' }}>
+                      Early R:R
+                    </strong>
+                    <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>
+                      1:{customRR || '1.5'} Exit
+                    </span>
+                  </button>
+
+                  {/* Option 5: ⏳ STILL OPEN */}
                   <button
                     type="button"
                     onClick={() => handleSelectOutcome('OPEN')}
@@ -937,14 +1024,192 @@ export default function LogTradeModal({
                     }}
                   >
                     <span style={{ fontSize: '1.2rem' }}>⏳</span>
-                    <strong style={{ fontSize: '0.85rem', color: formData.outcome === 'OPEN' ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>
+                    <strong style={{ fontSize: '0.82rem', color: formData.outcome === 'OPEN' ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>
                       Still Open
                     </strong>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)' }}>
                       Running
                     </span>
                   </button>
                 </div>
+
+                {/* EXPANDABLE EARLY EXIT & CUSTOM R:R PANEL */}
+                {formData.outcome === 'CUSTOM_RR' && (
+                  <div style={{
+                    marginTop: '12px',
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(15, 23, 42, 0.75) 100%)',
+                    border: '1.5px solid rgba(16, 185, 129, 0.35)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Scissors size={15} /> Early Exit at Realized Risk:Reward
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          Planned R:R: <strong>1:{dynamicRR || '2.0'}</strong> • Pick where you actually closed:
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>Realized R:</span>
+                        <input 
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          max="15"
+                          value={customRR}
+                          onChange={(e) => handleApplyCustomRR(parseFloat(e.target.value) || 1.0)}
+                          style={{
+                            width: '68px',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(16, 185, 129, 0.5)',
+                            background: 'rgba(0, 0, 0, 0.5)',
+                            color: '#10b981',
+                            fontWeight: 800,
+                            fontSize: '0.84rem',
+                            textAlign: 'center',
+                            fontFamily: 'var(--font-mono)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                        Quick R:R Presets (Click to auto-calculate):
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((ratio) => {
+                          const isSelected = Math.abs(parseFloat(customRR) - ratio) < 0.01;
+                          return (
+                            <button
+                              key={ratio}
+                              type="button"
+                              onClick={() => handleApplyCustomRR(ratio)}
+                              style={{
+                                padding: '5px 11px',
+                                borderRadius: '6px',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                border: isSelected ? '1.5px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.04)',
+                                color: isSelected ? '#10b981' : 'var(--text-secondary)',
+                                fontFamily: 'var(--font-mono)'
+                              }}
+                            >
+                              1:{ratio === 1 || ratio === 2 ? `${ratio}.0` : ratio}
+                              {isSelected && ' ✓'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Live Automatic Calculation Card */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                      gap: '8px',
+                      background: 'rgba(0, 0, 0, 0.38)',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(16, 185, 129, 0.2)'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                          Calculated Exit Price
+                        </span>
+                        <strong style={{ fontSize: '0.94rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                          {formData.exitPrice || (riskDist > 0 ? (isBuy ? (entryNum + riskDist * customRR).toFixed(2) : (entryNum - riskDist * customRR).toFixed(2)) : '—')}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                          Auto Net Profit
+                        </span>
+                        <strong style={{ fontSize: '0.94rem', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
+                          +{currency}{formData.pnl || (riskDist > 0 && currentQty > 0 ? (currentQty * riskDist * customRR).toFixed(2) : '0.00')}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+                          Realized Return
+                        </span>
+                        <strong style={{ fontSize: '0.94rem', color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>
+                          +{customRR}R ({formData.type})
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Exit Reason Selection */}
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                        Why did you exit early? (Click reason or type custom):
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                        {[
+                          '⏰ Time Ran Out / Session Close',
+                          '⏸️ Momentum Stalling / Low Vol',
+                          '🔒 Locked Early Profit',
+                          '🛡️ Trailing Stop Hit',
+                          '⚠️ Key S&R Resistance Reversal'
+                        ].map(reasonText => {
+                          const isReasonActive = (customExitReasonInput === reasonText) || (!customExitReasonInput && customExitReason === reasonText);
+                          return (
+                            <button
+                              key={reasonText}
+                              type="button"
+                              onClick={() => {
+                                setCustomExitReason(reasonText);
+                                setCustomExitReasonInput(reasonText);
+                                handleApplyCustomRR(customRR, reasonText);
+                              }}
+                              style={{
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                border: isReasonActive ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: isReasonActive ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.03)',
+                                color: isReasonActive ? '#38bdf8' : 'var(--text-secondary)'
+                              }}
+                            >
+                              {reasonText}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <input 
+                        type="text"
+                        className="form-input"
+                        placeholder="Or type specific exit reason (e.g. market closing, news event)..."
+                        value={customExitReasonInput}
+                        onChange={(e) => {
+                          setCustomExitReasonInput(e.target.value);
+                          handleApplyCustomRR(customRR, e.target.value);
+                        }}
+                        style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+                      />
+                    </div>
+
+                    {(!entryNum || !slNum) && (
+                      <div style={{ fontSize: '0.74rem', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.1)', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⚠️</span>
+                        <span>Enter Entry Price and Stop Loss above so the system can calculate exact exit price & profit automatically!</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Net P&L Field */}
                 <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0, 0.3)', padding: '10px 14px', borderRadius: '8px' }}>

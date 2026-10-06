@@ -15,7 +15,8 @@ import {
   Plus,
   Sparkles,
   Target,
-  AlertTriangle
+  AlertTriangle,
+  Scissors
 } from 'lucide-react';
 import { formatCurrency, formatTradeTime, calculateDayOfWeekStats, calculateAssetStats } from '../utils/calculations';
 import MistakeNoteModal from './MistakeNoteModal';
@@ -31,6 +32,9 @@ export default function Dashboard({
   const [tradeToClose, setTradeToClose] = useState(null);
   const [customExitPrice, setCustomExitPrice] = useState('');
   const [tradeToEditMistake, setTradeToEditMistake] = useState(null);
+  const [settleRR, setSettleRR] = useState(1.5);
+  const [settleReason, setSettleReason] = useState('Time Ran Out / Session Close');
+  const [customSettleReasonInput, setCustomSettleReasonInput] = useState('');
 
   // Lock background scroll when any modal is open
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function Dashboard({
   }, [tradeToClose, tradeToEditMistake]);
 
   // Handle Settle / Close Open Trade from Dashboard
-  const handleSettleTrade = (trade, outcomeType, overrideExit = null) => {
+  const handleSettleTrade = (trade, outcomeType, overrideValue = null, exitReason = '') => {
     if (!trade) return;
     const entry = parseFloat(trade.entryPrice) || 0;
     const sl = parseFloat(trade.stopLoss) || 0;
@@ -55,6 +59,7 @@ export default function Dashboard({
     let exit = 0;
     let pnl = 0;
     let finalOutcome = outcomeType;
+    let realizedRR = trade.realizedRR || null;
 
     if (outcomeType === 'TP_HIT') {
       exit = tp > 0 ? tp : entry;
@@ -70,8 +75,20 @@ export default function Dashboard({
       exit = entry;
       pnl = 0;
       finalOutcome = 'BREAKEVEN';
+    } else if (outcomeType === 'CUSTOM_RR') {
+      const rVal = parseFloat(overrideValue !== null ? overrideValue : settleRR) || 1.0;
+      realizedRR = rVal;
+      const riskPerUnit = sl > 0 ? Math.abs(entry - sl) : 0;
+      if (riskPerUnit > 0) {
+        exit = isBuy ? (entry + (riskPerUnit * rVal)) : (entry - (riskPerUnit * rVal));
+        pnl = parseFloat((qty * riskPerUnit * rVal).toFixed(2));
+      } else {
+        exit = entry;
+        pnl = 0;
+      }
+      finalOutcome = 'CUSTOM_RR';
     } else if (outcomeType === 'CUSTOM') {
-      exit = parseFloat(overrideExit !== null ? overrideExit : customExitPrice) || entry;
+      exit = parseFloat(overrideValue !== null ? overrideValue : customExitPrice) || entry;
       const points = isBuy ? (exit - entry) : (entry - exit);
       pnl = parseFloat((qty * points).toFixed(2));
       if (pnl > 0) finalOutcome = 'TP_HIT';
@@ -81,9 +98,12 @@ export default function Dashboard({
 
     const updatedTrade = {
       ...trade,
-      exitPrice: exit,
+      exitPrice: parseFloat(Number(exit).toFixed(3)),
       outcome: finalOutcome,
       pnl: pnl,
+      realizedRR: realizedRR,
+      riskRewardRatio: finalOutcome === 'CUSTOM_RR' && realizedRR ? `1:${realizedRR.toFixed(2)}` : trade.riskRewardRatio,
+      earlyExitReason: exitReason || customSettleReasonInput.trim() || settleReason || trade.earlyExitReason || '',
       closedAt: new Date().toISOString()
     };
 
@@ -91,14 +111,14 @@ export default function Dashboard({
       onUpdateTrade(updatedTrade);
     }
 
-    if (pnl > 0 || finalOutcome === 'TP_HIT') {
+    if (pnl > 0 || finalOutcome === 'TP_HIT' || finalOutcome === 'CUSTOM_RR') {
       confetti({ particleCount: 65, spread: 70, origin: { y: 0.8 } });
     }
 
     setTradeToClose(null);
     setCustomExitPrice('');
 
-    // ONLY if Stop Loss was strictly hit, prompt trader to record their mistake (NEVER on TP Hit)
+    // ONLY if Stop Loss was strictly hit, prompt trader to record their mistake (NEVER on TP Hit or positive R:R)
     if (finalOutcome === 'SL_HIT' && pnl < 0) {
       setTimeout(() => {
         setTradeToEditMistake(updatedTrade);
@@ -559,6 +579,16 @@ export default function Dashboard({
                             </span>
                           </div>
                         )}
+                        {trade.outcome === 'CUSTOM_RR' && (
+                          <div>
+                            <span 
+                              style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.2)', color: 'var(--profit)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}
+                              title={trade.earlyExitReason ? `Exit Reason: ${trade.earlyExitReason}` : undefined}
+                            >
+                              ✂️ 1:{trade.realizedRR ? Number(trade.realizedRR).toFixed(2) : (trade.riskRewardRatio ? trade.riskRewardRatio.replace('1:', '') : '1.0')} EXIT
+                            </span>
+                          </div>
+                        )}
                         {trade.outcome === 'OPEN' && (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginTop: '2px' }}>
                             <span style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-cyan)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700, display: 'inline-block' }}>
@@ -802,6 +832,148 @@ export default function Dashboard({
                     {currency}0.00
                   </span>
                 </button>
+
+                {/* 4. ✂️ CUSTOM R:R / EARLY EXIT */}
+                {(() => {
+                  const closeEntry = parseFloat(tradeToClose.entryPrice) || 0;
+                  const closeSL = parseFloat(tradeToClose.stopLoss) || 0;
+                  const closeQty = parseFloat(tradeToClose.lotSize) || 1.0;
+                  const closeRisk = closeSL > 0 ? Math.abs(closeEntry - closeSL) : 0;
+                  const closeIsBuy = tradeToClose.type === 'BUY';
+                  const calcExit = closeRisk > 0 ? (closeIsBuy ? (closeEntry + closeRisk * settleRR) : (closeEntry - closeRisk * settleRR)) : closeEntry;
+                  const calcProfit = closeRisk > 0 ? (closeQty * closeRisk * settleRR) : 0;
+
+                  return (
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                      border: '1.5px solid rgba(16, 185, 129, 0.4)',
+                      borderRadius: '10px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '1.6rem' }}>✂️</span>
+                          <div>
+                            <strong style={{ fontSize: '0.94rem', color: '#10b981', display: 'block' }}>
+                              Early Exit at Realized R:R
+                            </strong>
+                            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              Closed before target hit? Pick your actual exit R:R:
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.94rem', color: '#10b981', fontWeight: 800 }}>
+                            +{currency}{calcProfit > 0 ? calcProfit.toFixed(0) : 'Profit'}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>
+                            Exit: {calcExit > 0 ? calcExit.toFixed(2) : '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Presets */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map(ratio => {
+                          const isSelected = Math.abs(settleRR - ratio) < 0.01;
+                          return (
+                            <button
+                              key={ratio}
+                              type="button"
+                              onClick={() => setSettleRR(ratio)}
+                              style={{
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                border: isSelected ? '1.5px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.04)',
+                                color: isSelected ? '#10b981' : 'var(--text-secondary)',
+                                fontFamily: 'var(--font-mono)'
+                              }}
+                            >
+                              1:{ratio === 1 || ratio === 2 ? `${ratio}.0` : ratio}
+                              {isSelected && ' ✓'}
+                            </button>
+                          );
+                        })}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Custom R:</span>
+                          <input 
+                            type="number"
+                            step="0.1"
+                            value={settleRR}
+                            onChange={e => setSettleRR(parseFloat(e.target.value) || 1.0)}
+                            style={{
+                              width: '56px',
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              background: 'rgba(0, 0, 0, 0.4)',
+                              color: '#10b981',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              textAlign: 'center'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Reasons */}
+                      <div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                          Exit Reason:
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                          {['⏰ Time Ran Out / Session Close', '⏸️ Momentum Stalling', '🔒 Locked Profit', '🛡️ Trailing Exit'].map(reason => {
+                            const isReasonActive = (customSettleReasonInput === reason) || (!customSettleReasonInput && settleReason === reason);
+                            return (
+                              <button
+                                key={reason}
+                                type="button"
+                                onClick={() => {
+                                  setSettleReason(reason);
+                                  setCustomSettleReasonInput(reason);
+                                }}
+                                style={{
+                                  padding: '3px 8px',
+                                  borderRadius: '5px',
+                                  fontSize: '0.7rem',
+                                  cursor: 'pointer',
+                                  border: isReasonActive ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: isReasonActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                  color: isReasonActive ? '#38bdf8' : 'var(--text-secondary)'
+                                }}
+                              >
+                                {reason}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleSettleTrade(tradeToClose, 'CUSTOM_RR', settleRR, customSettleReasonInput.trim() || settleReason)}
+                        style={{
+                          width: '100%',
+                          padding: '9px 14px',
+                          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                          border: 'none',
+                          fontWeight: 700,
+                          fontSize: '0.84rem'
+                        }}
+                      >
+                        Close Trade at 1:{settleRR} R:R (+{currency}{calcProfit > 0 ? calcProfit.toFixed(0) : 'Profit'})
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 4. Custom Exit Price */}

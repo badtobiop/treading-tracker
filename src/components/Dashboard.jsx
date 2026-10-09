@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import confetti from 'canvas-confetti';
 import { 
   TrendingUp, 
@@ -35,6 +36,38 @@ export default function Dashboard({
   const [settleRR, setSettleRR] = useState(1.5);
   const [settleReason, setSettleReason] = useState('Time Ran Out / Session Close');
   const [customSettleReasonInput, setCustomSettleReasonInput] = useState('');
+
+  const settleModalRef = useRef(null);
+  const settleOverlayRef = useRef(null);
+
+  // Smooth GSAP Settle Modal Animation
+  useEffect(() => {
+    if (tradeToClose && settleModalRef.current && settleOverlayRef.current) {
+      gsap.killTweensOf([settleOverlayRef.current, settleModalRef.current]);
+      gsap.fromTo(settleOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(settleModalRef.current, 
+        { opacity: 0, scale: 0.94, y: 12 }, 
+        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power3.out', clearProps: 'transform,opacity' }
+      );
+    }
+  }, [tradeToClose]);
+
+  const handleCloseSettleModal = () => {
+    if (settleModalRef.current && settleOverlayRef.current) {
+      gsap.killTweensOf([settleOverlayRef.current, settleModalRef.current]);
+      gsap.to(settleOverlayRef.current, { opacity: 0, duration: 0.15, ease: 'power2.in' });
+      gsap.to(settleModalRef.current, { 
+        opacity: 0, 
+        scale: 0.95, 
+        y: 8, 
+        duration: 0.15, 
+        ease: 'power2.in', 
+        onComplete: () => setTradeToClose(null) 
+      });
+    } else {
+      setTradeToClose(null);
+    }
+  };
 
   // Lock background scroll when any modal is open
   useEffect(() => {
@@ -685,12 +718,14 @@ export default function Dashboard({
       {/* Settle Open Trade Quick Modal */}
       {tradeToClose && (
         <div 
+          ref={settleOverlayRef}
           className="modal-overlay" 
           data-lenis-prevent="true" 
-          onClick={() => setTradeToClose(null)}
+          onClick={handleCloseSettleModal}
           onWheel={e => e.stopPropagation()}
         >
           <div 
+            ref={settleModalRef}
             className="modal-content" 
             data-lenis-prevent="true" 
             onClick={e => e.stopPropagation()} 
@@ -710,7 +745,7 @@ export default function Dashboard({
                   </span>
                 </div>
               </div>
-              <button className="btn-icon" onClick={() => setTradeToClose(null)}>✕</button>
+              <button className="btn-icon" onClick={handleCloseSettleModal}>✕</button>
             </div>
 
             <div 
@@ -1010,7 +1045,7 @@ export default function Dashboard({
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setTradeToClose(null)}>
+              <button className="btn btn-secondary" onClick={handleCloseSettleModal}>
                 Cancel
               </button>
             </div>

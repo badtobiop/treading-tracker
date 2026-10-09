@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { 
   X, 
   Sparkles, 
@@ -440,14 +441,61 @@ export default function LogTradeModal({
   const checkedRulesCount = Object.values(checkedRules).filter(Boolean).length;
   const isAllRulesFollowed = totalRules > 0 && checkedRulesCount === totalRules;
 
+  const overlayRef = useRef(null);
+  const modalContentRef = useRef(null);
+
+  // Smooth GSAP Modal Entrance Animation
+  useEffect(() => {
+    if (isOpen && modalContentRef.current && overlayRef.current) {
+      gsap.killTweensOf([overlayRef.current, modalContentRef.current]);
+      gsap.fromTo(
+        overlayRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.22, ease: 'power2.out' }
+      );
+      gsap.fromTo(
+        modalContentRef.current,
+        { opacity: 0, scale: 0.94, y: 14 },
+        { 
+          opacity: 1, 
+          scale: 1, 
+          y: 0, 
+          duration: 0.28, 
+          ease: 'power3.out',
+          clearProps: 'transform,opacity'
+        }
+      );
+    }
+  }, [isOpen]);
+
+  // Smooth GSAP Close
+  const handleSmoothClose = () => {
+    if (modalContentRef.current && overlayRef.current) {
+      gsap.killTweensOf([overlayRef.current, modalContentRef.current]);
+      gsap.to(overlayRef.current, { opacity: 0, duration: 0.16, ease: 'power2.in' });
+      gsap.to(modalContentRef.current, {
+        opacity: 0,
+        scale: 0.95,
+        y: 8,
+        duration: 0.16,
+        ease: 'power2.in',
+        onComplete: onClose
+      });
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <div 
+      ref={overlayRef}
       className="modal-overlay" 
       data-lenis-prevent="true" 
-      onClick={onClose}
+      onClick={handleSmoothClose}
       onWheel={e => e.stopPropagation()}
     >
       <div 
+        ref={modalContentRef}
         className="modal-content" 
         data-lenis-prevent="true" 
         onClick={e => e.stopPropagation()}
@@ -465,7 +513,7 @@ export default function LogTradeModal({
               <span className="card-subtitle">Automatic R:R calculation, TP vs SL profit/loss audit, and rules check</span>
             </div>
           </div>
-          <button className="btn-icon" onClick={onClose}>
+          <button className="btn-icon" onClick={handleSmoothClose}>
             <X size={18} />
           </button>
         </div>
@@ -1513,7 +1561,7 @@ export default function LogTradeModal({
 
         {/* Footer */}
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button className="btn btn-secondary" onClick={handleSmoothClose}>
             Cancel
           </button>
           {activeTab === 'manual' && (

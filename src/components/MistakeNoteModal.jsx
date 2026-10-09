@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { AlertTriangle, Check, X, ShieldAlert, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
 
@@ -80,19 +81,52 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
     onSave(updatedTrade);
     setSavedSuccess(true);
     setTimeout(() => {
+      handleSmoothClose();
+    }, 500);
+  };
+
+  const noteOverlayRef = useRef(null);
+  const noteModalRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen && noteModalRef.current && noteOverlayRef.current) {
+      gsap.killTweensOf([noteOverlayRef.current, noteModalRef.current]);
+      gsap.fromTo(noteOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(noteModalRef.current, 
+        { opacity: 0, scale: 0.94, y: 12 }, 
+        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power3.out', clearProps: 'transform,opacity' }
+      );
+    }
+  }, [isOpen]);
+
+  const handleSmoothClose = () => {
+    if (noteModalRef.current && noteOverlayRef.current) {
+      gsap.killTweensOf([noteOverlayRef.current, noteModalRef.current]);
+      gsap.to(noteOverlayRef.current, { opacity: 0, duration: 0.15, ease: 'power2.in' });
+      gsap.to(noteModalRef.current, {
+        opacity: 0,
+        scale: 0.96,
+        y: 8,
+        duration: 0.15,
+        ease: 'power2.in',
+        onComplete: onClose
+      });
+    } else {
       onClose();
-    }, 600);
+    }
   };
 
   return (
     <div 
+      ref={noteOverlayRef}
       className="modal-overlay" 
       data-lenis-prevent="true" 
-      onClick={onClose} 
+      onClick={handleSmoothClose} 
       style={{ zIndex: 9999 }}
       onWheel={e => e.stopPropagation()}
     >
       <div 
+        ref={noteModalRef}
         className="modal-content" 
         data-lenis-prevent="true" 
         onClick={e => e.stopPropagation()} 
@@ -100,7 +134,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
         style={{ 
           maxWidth: '600px', 
           border: '1px solid rgba(244, 63, 94, 0.35)', 
-          boxShadow: '0 20px 50px rgba(0,0,0,0.65)' 
+          boxShadow: 'var(--neu-raised-floating)' 
         }}
       >
         {/* Header */}
@@ -127,7 +161,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
               </span>
             </div>
           </div>
-          <button className="btn-icon" onClick={onClose} type="button">
+          <button className="btn-icon" onClick={handleSmoothClose} type="button">
             <X size={18} />
           </button>
         </div>
@@ -283,7 +317,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
 
           {/* Footer */}
           <div className="modal-footer" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button type="button" className="btn btn-secondary" onClick={handleSmoothClose}>
               Cancel
             </button>
 

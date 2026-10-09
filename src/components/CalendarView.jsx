@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -17,6 +18,37 @@ export default function CalendarView({ trades, currency, onSelectTrade }) {
   // Current calendar view state (defaults to real current month & year)
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDayData, setSelectedDayData] = useState(null);
+
+  const dayModalRef = useRef(null);
+  const dayOverlayRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedDayData && dayModalRef.current && dayOverlayRef.current) {
+      gsap.killTweensOf([dayOverlayRef.current, dayModalRef.current]);
+      gsap.fromTo(dayOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(dayModalRef.current, 
+        { opacity: 0, scale: 0.94, y: 12 }, 
+        { opacity: 1, scale: 1, y: 0, duration: 0.24, ease: 'power3.out', clearProps: 'transform,opacity' }
+      );
+    }
+  }, [selectedDayData]);
+
+  const handleCloseDayModal = () => {
+    if (dayModalRef.current && dayOverlayRef.current) {
+      gsap.killTweensOf([dayOverlayRef.current, dayModalRef.current]);
+      gsap.to(dayOverlayRef.current, { opacity: 0, duration: 0.15, ease: 'power2.in' });
+      gsap.to(dayModalRef.current, {
+        opacity: 0,
+        scale: 0.96,
+        y: 8,
+        duration: 0.15,
+        ease: 'power2.in',
+        onComplete: () => setSelectedDayData(null)
+      });
+    } else {
+      setSelectedDayData(null);
+    }
+  };
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -194,8 +226,8 @@ export default function CalendarView({ trades, currency, onSelectTrade }) {
 
       {/* Selected Day Trades Detail Modal / Drawer */}
       {selectedDayData && (
-        <div className="modal-overlay" onClick={() => setSelectedDayData(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div ref={dayOverlayRef} className="modal-overlay" onClick={handleCloseDayModal}>
+          <div ref={dayModalRef} className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <CalendarIcon size={20} style={{ color: 'var(--accent-cyan)' }} />
@@ -203,7 +235,7 @@ export default function CalendarView({ trades, currency, onSelectTrade }) {
                   Trades for {selectedDayData.dateString}
                 </h3>
               </div>
-              <button className="btn-icon" onClick={() => setSelectedDayData(null)}>
+              <button className="btn-icon" onClick={handleCloseDayModal}>
                 <X size={18} />
               </button>
             </div>
@@ -292,7 +324,7 @@ export default function CalendarView({ trades, currency, onSelectTrade }) {
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedDayData(null)}>
+              <button className="btn btn-secondary" onClick={handleCloseDayModal}>
                 Close
               </button>
             </div>

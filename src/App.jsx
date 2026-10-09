@@ -129,26 +129,45 @@ export default function App() {
     };
   }, []);
 
-  // GSAP View Entrance Animations (Safe query with requestAnimationFrame)
+  // GSAP View Entrance Animations (Silky smooth 60fps GPU acceleration, zero blur)
   useEffect(() => {
     if (!currentUser) return;
+
+    // Kill any active tweens on tab change to prevent stacking/lag
+    gsap.killTweensOf('.view-container');
+    gsap.killTweensOf('.view-container .card, .view-container .kpi-card');
 
     const rafId = requestAnimationFrame(() => {
       const view = document.querySelector('.view-container');
       if (view) {
         gsap.fromTo(
           view,
-          { opacity: 0, y: 16, filter: 'blur(3px)' },
-          { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.35, ease: 'power2.out' }
+          { opacity: 0, y: 10 },
+          { 
+            opacity: 1, 
+            y: 0, 
+            duration: 0.24, 
+            ease: 'power3.out',
+            clearProps: 'transform,opacity'
+          }
         );
       }
 
-      const cards = document.querySelectorAll('.card, .kpi-card');
+      // Smooth subtle stagger for top-level visible cards (limited to first 6 to keep UI instant)
+      const cards = document.querySelectorAll('.view-container > .card, .view-container > * > .card, .view-container .kpi-card');
       if (cards && cards.length > 0) {
+        const topCards = Array.from(cards).slice(0, 6);
         gsap.fromTo(
-          cards,
-          { opacity: 0, y: 14 },
-          { opacity: 1, y: 0, duration: 0.35, stagger: 0.04, ease: 'power2.out' }
+          topCards,
+          { opacity: 0, y: 12 },
+          { 
+            opacity: 1, 
+            y: 0, 
+            duration: 0.22, 
+            stagger: 0.025, 
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
         );
       }
     });

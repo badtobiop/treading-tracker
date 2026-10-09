@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import { 
   Target, 
   Award, 
@@ -31,6 +32,37 @@ export default function StrategyVault({
   const [activeTab, setActiveTab] = useState('playbook'); // 'playbook' or 'analytics'
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStrategyId, setEditingStrategyId] = useState(null);
+
+  const strategyModalRef = useRef(null);
+  const strategyOverlayRef = useRef(null);
+
+  useEffect(() => {
+    if (isModalOpen && strategyModalRef.current && strategyOverlayRef.current) {
+      gsap.killTweensOf([strategyOverlayRef.current, strategyModalRef.current]);
+      gsap.fromTo(strategyOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(strategyModalRef.current, 
+        { opacity: 0, scale: 0.94, y: 12 }, 
+        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power3.out', clearProps: 'transform,opacity' }
+      );
+    }
+  }, [isModalOpen]);
+
+  const handleCloseStrategyModal = () => {
+    if (strategyModalRef.current && strategyOverlayRef.current) {
+      gsap.killTweensOf([strategyOverlayRef.current, strategyModalRef.current]);
+      gsap.to(strategyOverlayRef.current, { opacity: 0, duration: 0.15, ease: 'power2.in' });
+      gsap.to(strategyModalRef.current, {
+        opacity: 0,
+        scale: 0.96,
+        y: 8,
+        duration: 0.15,
+        ease: 'power2.in',
+        onComplete: () => setIsModalOpen(false)
+      });
+    } else {
+      setIsModalOpen(false);
+    }
+  };
 
   // Modal Form State
   const [formData, setFormData] = useState({
@@ -398,12 +430,14 @@ export default function StrategyVault({
       {/* CREATE / EDIT STRATEGY MODAL */}
       {isModalOpen && (
         <div 
+          ref={strategyOverlayRef}
           className="modal-overlay" 
           data-lenis-prevent="true" 
-          onClick={() => setIsModalOpen(false)}
+          onClick={handleCloseStrategyModal}
           onWheel={e => e.stopPropagation()}
         >
           <div 
+            ref={strategyModalRef}
             className="modal-content" 
             data-lenis-prevent="true" 
             style={{ maxWidth: '640px' }}
@@ -422,7 +456,7 @@ export default function StrategyVault({
                   <span className="card-subtitle">Define your setup logic and mandatory execution rules</span>
                 </div>
               </div>
-              <button className="btn-icon" onClick={() => setIsModalOpen(false)}>
+              <button className="btn-icon" onClick={handleCloseStrategyModal}>
                 <X size={18} />
               </button>
             </div>
@@ -544,7 +578,7 @@ export default function StrategyVault({
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleCloseStrategyModal}
                 >
                   Cancel
                 </button>

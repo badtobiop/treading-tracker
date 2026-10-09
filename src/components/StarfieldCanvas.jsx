@@ -16,7 +16,7 @@ export default function StarfieldCanvas() {
       width = canvas.width = window.innerWidth;
       height = canvas.height = window.innerHeight;
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize, { passive: true });
 
     // Mouse parallax tracking (subtle and smooth)
     let mouseX = 0;
@@ -28,7 +28,7 @@ export default function StarfieldCanvas() {
       targetMouseX = (e.clientX - width / 2) * 0.02;
       targetMouseY = (e.clientY - height / 2) * 0.02;
     };
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
 
     // Create 3D Stars - Slower, gentle cosmic drift
     const NUM_STARS = 220;
@@ -123,7 +123,9 @@ export default function StarfieldCanvas() {
         height: '100vh',
         pointerEvents: 'none',
         zIndex: 0,
-        opacity: 0.75
+        opacity: 0.75,
+        contain: 'strict',
+        willChange: 'transform'
       }}
     />
   );

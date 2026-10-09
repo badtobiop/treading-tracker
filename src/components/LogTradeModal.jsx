@@ -750,20 +750,60 @@ export default function LogTradeModal({
                     </div>
 
                     <div>
-                      <label className="form-label" style={{ fontSize: '0.72rem' }}>Leverage (Multiplier)</label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label className="form-label" style={{ fontSize: '0.72rem', marginBottom: '4px' }}>Leverage (Multiplier)</label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--accent-rose)', fontWeight: 700 }}>{leverage}x Active</span>
+                      </div>
                       <select 
                         className="form-select"
                         style={{ padding: '6px 10px', fontSize: '0.85rem' }}
                         value={leverage}
                         onChange={e => setLeverage(parseFloat(e.target.value) || 1)}
                       >
-                        <option value="50">50x (Gold / Forex - Recommended)</option>
-                        <option value="100">100x (High Leverage)</option>
-                        <option value="20">20x (Crypto / Futures)</option>
-                        <option value="10">10x (Crypto)</option>
-                        <option value="5">5x (Intraday Stocks)</option>
-                        <option value="1">1x (Cash - No Leverage)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="50">50x (Gold / Forex - Recommended)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="100">100x (High Leverage)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="20">20x (Crypto / Futures)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="10">10x (Crypto)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="5">5x (Intraday Stocks)</option>
+                        <option style={{ background: '#1a0818', color: '#fff1f2' }} value="1">1x (Cash - No Leverage)</option>
                       </select>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {[
+                          { val: 50, label: '50x' },
+                          { val: 20, label: '20x' },
+                          { val: 10, label: '10x' },
+                          { val: 100, label: '100x' },
+                          { val: 5, label: '5x' },
+                          { val: 1, label: '1x' }
+                        ].map(item => {
+                          const isSel = leverage === item.val;
+                          return (
+                            <button
+                              key={item.val}
+                              type="button"
+                              onClick={() => setLeverage(item.val)}
+                              style={{
+                                flex: 1,
+                                minWidth: '40px',
+                                padding: '4px 6px',
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                border: isSel ? '1px solid var(--accent-rose)' : '1px solid rgba(254, 205, 211, 0.08)',
+                                background: isSel 
+                                  ? 'linear-gradient(145deg, rgba(244, 63, 94, 0.35), rgba(225, 29, 72, 0.22))' 
+                                  : 'var(--neu-surface-inset)',
+                                color: isSel ? '#fff1f2' : 'var(--text-muted)',
+                                boxShadow: isSel ? '0 0 10px rgba(244, 63, 94, 0.3)' : 'var(--neu-sunken-sm)'
+                              }}
+                            >
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 

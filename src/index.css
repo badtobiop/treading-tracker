@@ -3,6 +3,8 @@
    ========================================================================== */
 
 :root {
+  color-scheme: dark;
+
   /* DARK RED NAVBAR / SIDEBAR */
   --bg-sidebar: #15040a;
   --bg-sidebar-hover: rgba(225, 29, 72, 0.16);
@@ -100,6 +102,7 @@
 }
 
 html, body {
+  color-scheme: dark;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
@@ -1221,7 +1224,7 @@ body::-webkit-scrollbar {
   align-items: center;
 }
 
-.form-input, .form-select, .form-textarea {
+.form-input, .form-textarea {
   background: var(--neu-surface-inset);
   box-shadow: var(--neu-sunken);
   border: 1px solid rgba(254, 205, 211, 0.06);
@@ -1235,9 +1238,54 @@ body::-webkit-scrollbar {
   width: 100%;
 }
 
-.form-input:focus, .form-select:focus, .form-textarea:focus {
-  border-color: rgba(244, 114, 182, 0.4);
+.form-select, select {
+  background-color: #170716;
+  color: #fff1f2;
+  color-scheme: dark;
+  border: 1px solid rgba(254, 205, 211, 0.14);
+  border-radius: var(--radius-md);
+  box-shadow: var(--neu-sunken);
+  padding: 11px 36px 11px 16px;
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  cursor: pointer;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f472b6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 14px) center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+
+.form-input:focus, .form-select:focus, select:focus, .form-textarea:focus {
+  border-color: rgba(244, 114, 182, 0.5);
   box-shadow: var(--neu-sunken-focus);
+  outline: none;
+}
+
+/* Explicit dark crimson background and rosy text for all dropdown options on all OS browsers */
+.form-select option,
+select option,
+optgroup {
+  background-color: #1a0818 !important;
+  color: #fff1f2 !important;
+  padding: 12px 14px !important;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.form-select option:hover,
+.form-select option:focus,
+.form-select option:checked,
+select option:hover,
+select option:focus,
+select option:checked {
+  background-color: #3b1232 !important;
+  color: #fda4af !important;
 }
 
 .form-input[type="number"] {

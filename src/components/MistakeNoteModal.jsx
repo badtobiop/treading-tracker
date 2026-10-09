@@ -43,10 +43,22 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
     }
   }, [isOpen]);
 
-  if (!isOpen || !trade) return null;
+  const noteOverlayRef = useRef(null);
+  const noteModalRef = useRef(null);
 
-  const pnl = Number(trade.pnl) || 0;
-  const isLoss = pnl < 0 || trade.outcome === 'SL_HIT';
+  useEffect(() => {
+    if (isOpen && noteModalRef.current && noteOverlayRef.current) {
+      gsap.killTweensOf([noteOverlayRef.current, noteModalRef.current]);
+      gsap.fromTo(noteOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(noteModalRef.current, 
+        { opacity: 0, scale: 0.94, y: 12 }, 
+        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power3.out', clearProps: 'transform,opacity' }
+      );
+    }
+  }, [isOpen]);
+
+  const pnl = Number(trade?.pnl) || 0;
+  const isLoss = pnl < 0 || trade?.outcome === 'SL_HIT';
 
   const handleToggleTag = (tag) => {
     if (selectedTags.includes(tag.id)) {
@@ -85,19 +97,7 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
     }, 500);
   };
 
-  const noteOverlayRef = useRef(null);
-  const noteModalRef = useRef(null);
 
-  useEffect(() => {
-    if (isOpen && noteModalRef.current && noteOverlayRef.current) {
-      gsap.killTweensOf([noteOverlayRef.current, noteModalRef.current]);
-      gsap.fromTo(noteOverlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: 'power2.out' });
-      gsap.fromTo(noteModalRef.current, 
-        { opacity: 0, scale: 0.94, y: 12 }, 
-        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power3.out', clearProps: 'transform,opacity' }
-      );
-    }
-  }, [isOpen]);
 
   const handleSmoothClose = () => {
     if (noteModalRef.current && noteOverlayRef.current) {
@@ -115,6 +115,8 @@ export default function MistakeNoteModal({ isOpen, trade, onClose, onSave, curre
       onClose();
     }
   };
+
+  if (!isOpen || !trade) return null;
 
   return (
     <div 

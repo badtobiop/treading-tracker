@@ -92,6 +92,33 @@ export default function LogTradeModal({
   // Strategy rules checklist state (ruleIndex: boolean)
   const [checkedRules, setCheckedRules] = useState({});
 
+  const overlayRef = useRef(null);
+  const modalContentRef = useRef(null);
+
+  // Smooth GSAP Modal Entrance Animation
+  useEffect(() => {
+    if (isOpen && modalContentRef.current && overlayRef.current) {
+      gsap.killTweensOf([overlayRef.current, modalContentRef.current]);
+      gsap.fromTo(
+        overlayRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.22, ease: 'power2.out' }
+      );
+      gsap.fromTo(
+        modalContentRef.current,
+        { opacity: 0, scale: 0.94, y: 14 },
+        { 
+          opacity: 1, 
+          scale: 1, 
+          y: 0, 
+          duration: 0.28, 
+          ease: 'power3.out',
+          clearProps: 'transform,opacity'
+        }
+      );
+    }
+  }, [isOpen]);
+
   // Sync preselected strategy when modal opens
   useEffect(() => {
     if (preselectedStrategy) {
@@ -128,8 +155,6 @@ export default function LogTradeModal({
 
     setFormData(prev => ({ ...prev, rulesFollowed: allChecked }));
   };
-
-  if (!isOpen) return null;
 
   // Real-time Dynamic Calculations from Entry, SL, TP & Trade Size
   const entryNum = parseFloat(formData.entryPrice) || 0;
@@ -441,33 +466,6 @@ export default function LogTradeModal({
   const checkedRulesCount = Object.values(checkedRules).filter(Boolean).length;
   const isAllRulesFollowed = totalRules > 0 && checkedRulesCount === totalRules;
 
-  const overlayRef = useRef(null);
-  const modalContentRef = useRef(null);
-
-  // Smooth GSAP Modal Entrance Animation
-  useEffect(() => {
-    if (isOpen && modalContentRef.current && overlayRef.current) {
-      gsap.killTweensOf([overlayRef.current, modalContentRef.current]);
-      gsap.fromTo(
-        overlayRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.22, ease: 'power2.out' }
-      );
-      gsap.fromTo(
-        modalContentRef.current,
-        { opacity: 0, scale: 0.94, y: 14 },
-        { 
-          opacity: 1, 
-          scale: 1, 
-          y: 0, 
-          duration: 0.28, 
-          ease: 'power3.out',
-          clearProps: 'transform,opacity'
-        }
-      );
-    }
-  }, [isOpen]);
-
   // Smooth GSAP Close
   const handleSmoothClose = () => {
     if (modalContentRef.current && overlayRef.current) {
@@ -485,6 +483,8 @@ export default function LogTradeModal({
       onClose();
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div 

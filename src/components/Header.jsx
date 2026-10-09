@@ -1,9 +1,10 @@
 import React from 'react';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Plus } from 'lucide-react';
 
 export default function Header({ 
   activeTab, 
   onOpenSettings,
+  onOpenLogModal,
   metrics,
   currency 
 }) {
@@ -32,7 +33,17 @@ export default function Header({
       </div>
 
       <div className="header-right">
-        {/* Clean, minimalist header without cluttered top buttons (User Request) */}
+        {onOpenLogModal && (
+          <button 
+            className="btn btn-primary"
+            style={{ padding: '7px 14px', fontSize: '0.82rem' }}
+            onClick={onOpenLogModal}
+            title="Log New Trade into Terminal"
+          >
+            <Plus size={15} />
+            <span>Log Trade</span>
+          </button>
+        )}
         <button 
           className="btn-icon" 
           onClick={onOpenSettings} 

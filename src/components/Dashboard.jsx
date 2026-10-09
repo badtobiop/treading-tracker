@@ -515,15 +515,26 @@ export default function Dashboard({
               </h2>
               <span className="card-subtitle">Latest recorded trading activity</span>
             </div>
-            {trades.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button 
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                onClick={() => onNavigate('logbook')}
+                className="btn btn-primary" 
+                style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                onClick={onOpenLogModal}
+                title="Log New Trade into Terminal"
               >
-                View All ({trades.length})
+                <Plus size={14} />
+                <span>Log Trade</span>
               </button>
-            )}
+              {trades.length > 0 && (
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                  onClick={() => onNavigate('logbook')}
+                >
+                  View All ({trades.length})
+                </button>
+              )}
+            </div>
           </div>
 
           {trades.length === 0 ? (

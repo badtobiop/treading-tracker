@@ -283,6 +283,7 @@ export default function App() {
             <Header 
               activeTab={activeTab}
               onOpenSettings={() => setActiveTab('settings')}
+              onOpenLogModal={() => setIsLogModalOpen(true)}
               metrics={metrics}
               currency={settings.currency}
             />

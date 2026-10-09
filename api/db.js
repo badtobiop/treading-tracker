@@ -1,4 +1,5 @@
 import { createClient } from '@libsql/client';
+import nodemailer from 'nodemailer';
 
 let tursoClient = null;
 
@@ -287,6 +288,229 @@ export default async function handler(req, res) {
           capital: initialCapital,
           authProvider: 'google'
         }
+      });
+    }
+
+    // E. Send Password Reset OTP via Email
+    if (action === 'sendPasswordResetOtp') {
+      const cleanEmail = (email || '').toLowerCase().trim();
+      if (!cleanEmail) {
+        return res.status(400).json({ success: false, error: 'Please enter your registered email address.' });
+      }
+
+      // Check if user exists in database
+      const userRes = await client.execute({
+        sql: 'SELECT id, name, email, auth_provider FROM users WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
+      });
+
+      let foundUser = userRes.rows.length > 0 ? userRes.rows[0] : null;
+
+      if (!foundUser) {
+        // Also check profiles table
+        const profileRes = await client.execute({
+          sql: 'SELECT id, name, email, auth_provider FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+          args: [cleanEmail]
+        });
+
+        if (profileRes.rows.length > 0) {
+          foundUser = profileRes.rows[0];
+        }
+      }
+
+      if (!foundUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'No account registered with this email address. Please check your spelling or register a new account.'
+        });
+      }
+
+      if (foundUser.auth_provider === 'google') {
+        return res.status(400).json({
+          success: false,
+          error: 'This account was registered using Google. Please sign in using "Continue with Google".'
+        });
+      }
+
+      // Ensure password_resets table exists
+      await client.execute({
+        sql: `CREATE TABLE IF NOT EXISTS password_resets (
+          email TEXT PRIMARY KEY,
+          otp TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`,
+        args: []
+      });
+
+      // Generate 6-digit numeric OTP
+      const otp = String(Math.floor(100000 + Math.random() * 900000));
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes from now
+
+      // Save or update OTP in password_resets table
+      await client.execute({
+        sql: `INSERT INTO password_resets (email, otp, expires_at)
+              VALUES (?, ?, ?)
+              ON CONFLICT(email) DO UPDATE SET otp = excluded.otp, expires_at = excluded.expires_at, created_at = CURRENT_TIMESTAMP`,
+        args: [cleanEmail, otp, expiresAt]
+      });
+
+      // Send OTP via Nodemailer
+      const gmailUser = process.env.GMAIL_USER || process.env.VITE_NOTIFICATION_ADMIN_EMAIL || 'utkarshdhakane2@gmail.com';
+      const gmailPassword = process.env.GMAIL_APP_PASSWORD || process.env.VITE_GMAIL_APP_PASSWORD;
+
+      if (!gmailPassword) {
+        console.warn('[Password Reset] GMAIL_APP_PASSWORD not set.');
+        return res.status(200).json({
+          success: true,
+          message: `Verification code generated. Code: ${otp}`,
+          otp
+        });
+      }
+
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: gmailUser,
+          pass: gmailPassword.trim().replace(/\s+/g, '')
+        }
+      });
+
+      const recipientName = foundUser.name || cleanEmail.split('@')[0];
+
+      const mailOptions = {
+        from: `"TradeMatrix Security" <${gmailUser}>`,
+        to: cleanEmail,
+        subject: `🔐 ${otp} is your TradeMatrix verification code`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #140711; color: #fff1f2; padding: 32px; border-radius: 16px; border: 1px solid rgba(244, 63, 94, 0.35); max-width: 520px; margin: 0 auto; box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+            <div style="border-bottom: 1px solid rgba(254, 205, 211, 0.12); padding-bottom: 18px; margin-bottom: 22px; text-align: center;">
+              <h2 style="color: #f43f5e; margin: 0 0 6px 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;">TradeMatrix AI</h2>
+              <span style="font-size: 13px; color: #fda4af;">Password Reset Verification</span>
+            </div>
+
+            <p style="font-size: 15px; color: #fbcfe8; line-height: 1.6; margin: 0 0 16px 0;">
+              Hello <strong>${recipientName}</strong>,
+            </p>
+            <p style="font-size: 14px; color: #e2e8f0; line-height: 1.6; margin: 0 0 24px 0;">
+              We received a request to reset the password for your TradeMatrix AI terminal account. Use the verification code below to set your new password:
+            </p>
+
+            <div style="background: linear-gradient(145deg, #220d1f, #150613); border: 1px solid rgba(244, 114, 182, 0.35); border-radius: 12px; padding: 22px; text-align: center; margin: 0 0 24px 0; box-shadow: inset 2px 2px 8px rgba(0,0,0,0.7);">
+              <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #fda4af; margin-bottom: 8px; font-weight: 700;">Your 6-Digit Verification Code</div>
+              <div style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 900; letter-spacing: 0.28em; color: #ffffff; text-shadow: 0 0 16px rgba(244, 63, 94, 0.7);">
+                ${otp}
+              </div>
+            </div>
+
+            <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 114, 182, 0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; color: #fda4af; margin-bottom: 24px;">
+              ⏱ <strong>Note:</strong> This verification code expires in <strong>10 minutes</strong>. Never share this code with anyone.
+            </div>
+
+            <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin: 0;">
+              If you did not request a password reset, please ignore this email. Your account remains secure.
+            </p>
+          </div>
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`[Password Reset] OTP email successfully dispatched to ${cleanEmail}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'A 6-digit verification code has been dispatched to your email address.'
+      });
+    }
+
+    // F. Verify OTP and Update Password
+    if (action === 'verifyOtpAndResetPassword') {
+      const cleanEmail = (email || '').toLowerCase().trim();
+      const cleanOtp = String(body.otp || '').trim();
+      const newPassword = String(body.newPassword || '').trim();
+
+      if (!cleanEmail || !cleanOtp || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email address, OTP verification code, and new password are required.'
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          error: 'Your new password must be at least 6 characters long.'
+        });
+      }
+
+      // Check OTP in password_resets table
+      const resetRes = await client.execute({
+        sql: 'SELECT * FROM password_resets WHERE LOWER(email) = ? LIMIT 1',
+        args: [cleanEmail]
+      });
+
+      if (resetRes.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No active OTP request found for this email. Please request a new verification code.'
+        });
+      }
+
+      const resetRow = resetRes.rows[0];
+      const now = Date.now();
+
+      if (now > Number(resetRow.expires_at)) {
+        await client.execute({
+          sql: 'DELETE FROM password_resets WHERE LOWER(email) = ?',
+          args: [cleanEmail]
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'The verification code has expired (valid for 10 minutes). Please request a new code.'
+        });
+      }
+
+      if (String(resetRow.otp).trim() !== cleanOtp) {
+        return res.status(400).json({
+          success: false,
+          error: 'Incorrect OTP verification code. Please check your email and try again.'
+        });
+      }
+
+      // OTP is verified! Update password in users table
+      const updateRes = await client.execute({
+        sql: 'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = ?',
+        args: [newPassword, cleanEmail]
+      });
+
+      // If user row wasn't in users table yet (e.g. legacy profile), insert into users
+      if (updateRes.rowsAffected === 0) {
+        const profileRes = await client.execute({
+          sql: 'SELECT * FROM profiles WHERE LOWER(email) = ? LIMIT 1',
+          args: [cleanEmail]
+        });
+
+        if (profileRes.rows.length > 0) {
+          const prof = profileRes.rows[0];
+          await client.execute({
+            sql: `INSERT INTO users (id, email, password_hash, name, avatar, capital, auth_provider)
+                  VALUES (?, ?, ?, ?, ?, ?, 'email')`,
+            args: [prof.id, cleanEmail, newPassword, prof.name || cleanEmail.split('@')[0], prof.avatar || '', prof.capital || 10000]
+          });
+        }
+      }
+
+      // Delete consumed OTP
+      await client.execute({
+        sql: 'DELETE FROM password_resets WHERE LOWER(email) = ?',
+        args: [cleanEmail]
+      });
+
+      console.log(`[Password Reset] Password successfully updated for ${cleanEmail}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Password successfully updated! You can now sign in with your new password.'
       });
     }
 

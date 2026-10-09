@@ -12,7 +12,9 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  KeyRound,
+  ArrowLeft
 } from 'lucide-react';
 import { sendNewUserRegistrationNotification } from '../services/notificationService';
 import { 
@@ -24,11 +26,13 @@ import {
   checkEmailExistsInTurso, 
   registerUserInTurso, 
   loginUserInTurso, 
-  syncGoogleUserToTurso 
+  syncGoogleUserToTurso,
+  sendPasswordResetOtp,
+  verifyOtpAndResetPassword
 } from '../services/tursoService';
 
 export default function AuthPage({ onLoginSuccess }) {
-  const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
+  const [authMode, setAuthMode] = useState('signin'); // 'signin', 'signup', or 'forgot'
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -41,6 +45,24 @@ export default function AuthPage({ onLoginSuccess }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [capital, setCapital] = useState(10000);
+
+  // Forgot password OTP workflow fields
+  const [forgotStep, setForgotStep] = useState('email'); // 'email' or 'otp'
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Resend OTP countdown timer
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setTimeout(() => setResendCooldown(prev => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   // Read registered users from localStorage (offline fallback cache)
   const getStoredUsers = () => {
@@ -251,6 +273,89 @@ export default function AuthPage({ onLoginSuccess }) {
   };
 
   /**
+   * Request 6-digit OTP for Password Reset
+   */
+  const handleRequestOtp = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const targetEmail = (forgotEmail || email).trim().toLowerCase();
+    if (!targetEmail) {
+      setErrorMessage('Please enter your registered Gmail / email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await sendPasswordResetOtp({ email: targetEmail });
+      if (res && res.success) {
+        setForgotEmail(targetEmail);
+        setForgotStep('otp');
+        setResendCooldown(45);
+        setSuccessMessage(`A 6-digit verification code has been dispatched to ${targetEmail}`);
+      } else {
+        setErrorMessage(res?.error || 'Failed to send verification code. Please check your email.');
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Error communicating with authentication server.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Verify OTP & Set New Password
+   */
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const cleanOtp = otpCode.trim();
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setErrorMessage('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      setErrorMessage('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setErrorMessage('Passwords do not match. Please ensure both fields are identical.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await verifyOtpAndResetPassword({
+        email: forgotEmail,
+        otp: cleanOtp,
+        newPassword
+      });
+
+      if (res && res.success) {
+        setSuccessMessage('Password reset successfully! Please sign in with your new password.');
+        setEmail(forgotEmail);
+        setPassword('');
+        setOtpCode('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setAuthMode('signin');
+        setForgotStep('email');
+      } else {
+        setErrorMessage(res?.error || 'Verification failed. Please check your code.');
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Error updating password.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
    * Pre-initialize Google OAuth token client on mount and render official button
    */
   useEffect(() => {
@@ -310,31 +415,57 @@ export default function AuthPage({ onLoginSuccess }) {
           </p>
         </div>
 
-        {/* Tab Toggle: Sign In vs Create Account */}
-        <div className="auth-tabs">
-          <button 
-            type="button"
-            className={`auth-tab-btn ${authMode === 'signin' ? 'active' : ''}`}
-            onClick={() => { 
-              setAuthMode('signin'); 
-              setErrorMessage(''); 
-              setSuccessMessage(''); 
-            }}
-          >
-            Sign In
-          </button>
-          <button 
-            type="button"
-            className={`auth-tab-btn ${authMode === 'signup' ? 'active' : ''}`}
-            onClick={() => { 
-              setAuthMode('signup'); 
-              setErrorMessage(''); 
-              setSuccessMessage(''); 
-            }}
-          >
-            Create Account
-          </button>
-        </div>
+        {/* Tab Toggle: Sign In vs Create Account OR Forgot Mode Header */}
+        {authMode === 'forgot' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--neu-surface-inset)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(254, 205, 211, 0.08)' }}>
+            <button 
+              type="button"
+              className="btn-icon"
+              style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0 }}
+              onClick={() => {
+                setAuthMode('signin');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              title="Return to Sign In"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#fff1f2' }}>
+                {forgotStep === 'email' ? 'Account Recovery' : 'Reset Password'}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                {forgotStep === 'email' ? 'Enter your email to receive an OTP' : `Enter the 6-digit code sent to ${forgotEmail}`}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="auth-tabs">
+            <button 
+              type="button"
+              className={`auth-tab-btn ${authMode === 'signin' ? 'active' : ''}`}
+              onClick={() => { 
+                setAuthMode('signin'); 
+                setErrorMessage(''); 
+                setSuccessMessage(''); 
+              }}
+            >
+              Sign In
+            </button>
+            <button 
+              type="button"
+              className={`auth-tab-btn ${authMode === 'signup' ? 'active' : ''}`}
+              onClick={() => { 
+                setAuthMode('signup'); 
+                setErrorMessage(''); 
+                setSuccessMessage(''); 
+              }}
+            >
+              Create Account
+            </button>
+          </div>
+        )}
 
         {/* Error Notification Banner with Browser Pop-up Guidance */}
         {errorMessage && (
@@ -377,47 +508,245 @@ export default function AuthPage({ onLoginSuccess }) {
         )}
 
         {/* GOOGLE SIGN IN BUTTONS (Multi-Account Picker via Google OAuth 2.0) */}
-        <div style={{ margin: '2px 0 10px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <button
-            type="button"
-            className="auth-google-btn"
-            onClick={handleGoogleBtnClick}
-            disabled={isSubmitting}
-            title="Sign in with your verified Google account"
-          >
-            {/* Google Multicolor 'G' */}
-            <svg width="20" height="20" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            <span>Continue with Google</span>
-          </button>
+        {authMode !== 'forgot' && (
+          <div style={{ margin: '2px 0 10px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button
+              type="button"
+              className="auth-google-btn"
+              onClick={handleGoogleBtnClick}
+              disabled={isSubmitting}
+              title="Sign in with your verified Google account"
+            >
+              {/* Google Multicolor 'G' */}
+              <svg width="20" height="20" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
 
-          {/* Official Google GIS Button (Immune to browser popup blockers) */}
-          <div 
-            id="google-official-btn" 
-            style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              minHeight: '40px',
-              borderRadius: '8px',
-              overflow: 'hidden'
-            }} 
-          />
+            {/* Official Google GIS Button (Immune to browser popup blockers) */}
+            <div 
+              id="google-official-btn" 
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                minHeight: '40px',
+                borderRadius: '8px',
+                overflow: 'hidden'
+              }} 
+            />
 
-          <div className="auth-divider">
-            <div className="auth-divider-line" />
-            <span className="auth-divider-text">
-              {authMode === 'signin' ? 'or sign in with password' : 'or register with password'}
-            </span>
-            <div className="auth-divider-line" />
+            <div className="auth-divider">
+              <div className="auth-divider-line" />
+              <span className="auth-divider-text">
+                {authMode === 'signin' ? 'or sign in with password' : 'or register with password'}
+              </span>
+              <div className="auth-divider-line" />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* MODE 1: SIGN IN FORM */}
-        {authMode === 'signin' ? (
+        {/* FORGOT PASSWORD FORM */}
+        {authMode === 'forgot' ? (
+          forgotStep === 'email' ? (
+            <form className="auth-form" onSubmit={handleRequestOtp}>
+              <div className="form-group">
+                <label className="form-label">Registered Gmail / Email</label>
+                <div className="auth-input-wrapper">
+                  <Mail size={17} />
+                  <input 
+                    type="email"
+                    className="form-input"
+                    placeholder="Enter your registered email address"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  A 6-digit one-time code will be dispatched to this email.
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                style={{ padding: '12px', fontSize: '0.95rem', marginTop: '4px' }}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    <span>Sending Verification Code...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={17} />
+                    <span>Send Verification Code</span>
+                  </>
+                )}
+              </button>
+
+              <div style={{ textAlign: 'center', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className="auth-forgot-link"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <ArrowLeft size={14} />
+                  <span>Back to Sign In</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="auth-form" onSubmit={handleResetPassword}>
+              <div style={{
+                background: 'rgba(244, 63, 94, 0.08)',
+                border: '1px solid rgba(244, 63, 94, 0.2)',
+                borderRadius: 'var(--radius-md)',
+                padding: '10px 12px',
+                fontSize: '0.78rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.45,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px'
+              }}>
+                <div>
+                  Code sent to <strong style={{ color: '#fff1f2' }}>{forgotEmail}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotStep('email');
+                    setOtpCode('');
+                    setErrorMessage('');
+                  }}
+                  className="auth-forgot-link"
+                  style={{ fontSize: '0.74rem' }}
+                >
+                  Change Email
+                </button>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">6-Digit Verification Code</label>
+                <div className="auth-input-wrapper">
+                  <KeyRound size={17} />
+                  <input 
+                    type="text"
+                    className="form-input auth-otp-input"
+                    placeholder="------"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.74rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Valid for 10 minutes</span>
+                  {resendCooldown > 0 ? (
+                    <span style={{ color: 'var(--text-muted)' }}>Resend code in {resendCooldown}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRequestOtp}
+                      disabled={isSubmitting}
+                      className="auth-forgot-link"
+                      style={{ fontSize: '0.74rem' }}
+                    >
+                      Resend Code
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">New Password</label>
+                <div className="auth-input-wrapper">
+                  <Lock size={17} />
+                  <input 
+                    type={showNewPassword ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Enter new password (min. 6 chars)"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    style={{ paddingRight: '40px' }}
+                    required
+                  />
+                  <button 
+                    type="button" 
+                    style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    title={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm New Password</label>
+                <div className="auth-input-wrapper">
+                  <Lock size={17} />
+                  <input 
+                    type={showNewPassword ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Confirm new password"
+                    value={confirmNewPassword}
+                    onChange={e => setConfirmNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                style={{ padding: '12px', fontSize: '0.95rem', marginTop: '6px' }}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    <span>Resetting Password...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={18} />
+                    <span>Reset Password & Sign In</span>
+                  </>
+                )}
+              </button>
+
+              <div style={{ textAlign: 'center', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className="auth-forgot-link"
+                >
+                  Cancel & Return to Sign In
+                </button>
+              </div>
+            </form>
+          )
+        ) : authMode === 'signin' ? (
+          /* MODE 1: SIGN IN FORM */
           <form className="auth-form" onSubmit={handleSignIn}>
             <div className="form-group">
               <label className="form-label">Gmail / Email Address</label>
@@ -436,7 +765,22 @@ export default function AuthPage({ onLoginSuccess }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Password</label>
+                <button
+                  type="button"
+                  className="auth-forgot-link"
+                  onClick={() => {
+                    setAuthMode('forgot');
+                    setForgotStep('email');
+                    setForgotEmail(email || '');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <div className="auth-input-wrapper">
                 <Lock size={17} />
                 <input 

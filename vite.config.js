@@ -183,9 +183,12 @@ function emailNotificationPlugin(env) {
         });
       });
 
-      // Pass Turso environment variables into process.env for local database proxy
+      // Pass Turso & Gmail environment variables into process.env for local database proxy
       if (env.VITE_TURSO_DATABASE_URL) process.env.TURSO_DATABASE_URL = env.VITE_TURSO_DATABASE_URL;
       if (env.VITE_TURSO_AUTH_TOKEN) process.env.TURSO_AUTH_TOKEN = env.VITE_TURSO_AUTH_TOKEN;
+      if (env.GMAIL_USER) process.env.GMAIL_USER = env.GMAIL_USER;
+      if (env.GMAIL_APP_PASSWORD) process.env.GMAIL_APP_PASSWORD = env.GMAIL_APP_PASSWORD;
+      if (env.VITE_NOTIFICATION_ADMIN_EMAIL) process.env.VITE_NOTIFICATION_ADMIN_EMAIL = env.VITE_NOTIFICATION_ADMIN_EMAIL;
 
       // Handle secure backend database proxy locally
       server.middlewares.use('/api/db', async (req, res) => {

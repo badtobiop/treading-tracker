@@ -729,3 +729,57 @@ export async function syncGoogleUserToTurso(googleProfile) {
   }
 }
 
+/**
+ * Request a 6-digit password reset OTP to be emailed to the user
+ */
+export async function sendPasswordResetOtp({ email }) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  if (!cleanEmail) {
+    return { success: false, error: 'Please enter your registered email address.' };
+  }
+
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sendPasswordResetOtp', email: cleanEmail })
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('[Password Reset Error]:', err);
+    return { success: false, error: err.message || 'Network error requesting verification code.' };
+  }
+}
+
+/**
+ * Verify OTP and update user password
+ */
+export async function verifyOtpAndResetPassword({ email, otp, newPassword }) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const cleanOtp = String(otp || '').trim();
+  const cleanPassword = String(newPassword || '').trim();
+
+  if (!cleanEmail || !cleanOtp || !cleanPassword) {
+    return { success: false, error: 'Email, verification code, and new password are required.' };
+  }
+
+  try {
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'verifyOtpAndResetPassword',
+        email: cleanEmail,
+        otp: cleanOtp,
+        newPassword: cleanPassword
+      })
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('[Password Reset Error]:', err);
+    return { success: false, error: err.message || 'Network error verifying code.' };
+  }
+}
+

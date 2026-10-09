@@ -1769,6 +1769,31 @@ body::-webkit-scrollbar {
   transition: all 0.2s;
 }
 
+.auth-forgot-link {
+  background: none;
+  border: none;
+  color: var(--accent-rose);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+  user-select: none;
+}
+
+.auth-forgot-link:hover {
+  color: #fff1f2;
+  text-decoration: underline;
+}
+
+.auth-otp-input {
+  letter-spacing: 0.35em !important;
+  font-family: var(--font-mono) !important;
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  text-align: center;
+}
+
 .auth-quick-login-badge:hover {
   color: #fff1f2;
   text-decoration: underline;
